@@ -138,7 +138,7 @@ class CloudinaryStorage:
         # through httpx without buffering, so we read fully here. Cap is
         # 40 MB (matching MAX_UPLOAD_BYTES in utils.file_parsers) — anything
         # larger gets rejected before we waste bandwidth.
-        from ..utils.file_parsers import MAX_UPLOAD_BYTES
+        from ...utils.file_parsers import MAX_UPLOAD_BYTES
 
         chunks: list[bytes] = []
         size = 0
