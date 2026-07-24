@@ -7,7 +7,15 @@ import './styles/globals.css'
 import App from './App'
 import { queryClient } from './lib/queryClient'
 import { MeshGradient } from './components/background/MeshGradient'
-import { envError } from './lib/env'
+import { envError, env, firebaseEnabled, firebaseConfig } from './lib/env'
+
+// Diagnostic (open DevTools → Console): shows which auth mode the built bundle
+// is in. "firebase" means VITE_FIREBASE_* baked in; "legacy" means they didn't.
+console.info(
+  `%c[Paragon] auth mode: ${firebaseEnabled ? 'firebase ✅' : 'legacy (VITE_FIREBASE_* not set in this build) ⚠️'}`,
+  'font-weight:bold',
+  { api: env.API_URL, firebaseProject: firebaseConfig.projectId || '(none)' },
+)
 
 const rootEl = document.getElementById('root')!
 
