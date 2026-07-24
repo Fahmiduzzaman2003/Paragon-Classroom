@@ -8,8 +8,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -1170,10 +1171,42 @@ async def delete_question_image(
     await db.commit()
 
 
+async def _serve_stored_file(
+    src: str, *, media_type: str, filename: str | None = None, disposition: str = "inline"
+):
+    """Serve a stored file whether it lives on the local disk (dev) or at a
+    remote object-storage URL (Cloudinary, prod).
+
+    For remote files we PROXY the bytes through the backend rather than
+    redirecting: the browser never needs Cloudinary credentials, there's no
+    cross-origin CORS to satisfy, and it works even if the account requires
+    authenticated delivery. Files are small (images/attachments are capped at a
+    few MB), so buffering is fine on the free tier.
+    """
+    if src.startswith(("http://", "https://")):
+        try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                r = await client.get(src)
+                r.raise_for_status()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Stored file proxy fetch failed (%s): %s", src, e)
+            raise HTTPException(status_code=502, detail="Could not fetch file from storage")
+        headers = {"Cache-Control": "public, max-age=3600"}
+        if filename:
+            headers["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+        return Response(content=r.content, media_type=media_type, headers=headers)
+
+    # Local disk (dev): map the public "/uploads/<rel>" url back to the real path.
+    p = settings.uploads_dir / src[len("/uploads/"):] if src.startswith("/uploads/") else Path(src)
+    if not p.exists():
+        raise HTTPException(status_code=410, detail="File no longer available")
+    return FileResponse(p, media_type=media_type, filename=p.name)
+
+
 @router.get("/questions/{question_id}/image")
 async def fetch_question_image(
     question_id: str, current: CurrentUser, db: Database
-) -> FileResponse:
+):
     question = await db.get(Question, question_id)
     if not question or not getattr(question, "image_path", None):
         raise HTTPException(status_code=404, detail="No image attached")
@@ -1183,16 +1216,16 @@ async def fetch_question_image(
     # Anyone enrolled in the course (or the teacher) may fetch the image —
     # students need it to answer the question.
     await assert_enrolled(db, current, quiz.course_id)
-    p = Path(question.image_path)
-    if not p.exists():
-        raise HTTPException(status_code=410, detail="Image no longer available")
-    return FileResponse(p, media_type=question.image_mime or "image/png", filename=p.name)
+    return await _serve_stored_file(
+        str(question.image_path),
+        media_type=question.image_mime or "image/png",
+    )
 
 
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(
     attachment_id: str, current: CurrentUser, db: Database
-) -> FileResponse:
+):
     att = await db.get(AttemptAttachment, attachment_id)
     if not att:
         raise HTTPException(status_code=404, detail="Attachment not found")
@@ -1205,10 +1238,9 @@ async def download_attachment(
     is_teacher = await _is_teacher(db, quiz.course_id, current)
     if attempt.student_id != current.id and not is_teacher:
         raise HTTPException(status_code=403, detail="Not permitted")
-    p = Path(att.path)
-    if not p.exists():
-        raise HTTPException(status_code=410, detail="File no longer available")
-    return FileResponse(p, media_type=att.mime, filename=att.filename)
+    return await _serve_stored_file(
+        str(att.path), media_type=att.mime, filename=att.filename, disposition="attachment"
+    )
 
 
 # ─────────────────────────────────────────────────────
