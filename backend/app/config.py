@@ -173,6 +173,15 @@ class Settings(BaseSettings):
     # is trimmed deterministically (least-relevant first) when it would exceed.
     rag_context_budget_tokens: int = 3000
 
+    # ── Semantic answer cache (free: reuses pgvector + Gemini embeddings) ──
+    # A standalone question whose embedding is within `threshold` cosine
+    # similarity of a previously-answered one (same course) returns the cached
+    # answer instantly, skipping retrieval + the LLM. Fail-open: any cache error
+    # falls through to the normal path. pgvector-only (no-op on sqlite/chroma).
+    semantic_cache_enabled: bool = True
+    semantic_cache_threshold: float = 0.94
+    semantic_cache_ttl_days: int = 14
+
     # ── Ingestion worker pool (free tier: no external queue) ───────
     ingest_concurrency: int = 2
     ingest_job_timeout_s: int = 300

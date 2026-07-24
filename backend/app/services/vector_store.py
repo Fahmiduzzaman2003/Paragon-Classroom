@@ -306,6 +306,87 @@ class PgVectorBackend:
                 text("SELECT count(*) FROM rag_chunks WHERE collection = :c"), {"c": collection}
             ).scalar() or 0)
 
+    # ── Semantic answer cache ──────────────────────────────────
+    def _ensure_cache_schema(self) -> None:
+        if getattr(self, "_cache_ensured", False):
+            return
+        from sqlalchemy import text
+
+        with self._ensure_lock:
+            if getattr(self, "_cache_ensured", False):
+                return
+            with self._engine.begin() as c:
+                c.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                c.execute(text(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS qa_cache (
+                        id TEXT PRIMARY KEY,
+                        course_id TEXT NOT NULL,
+                        question TEXT NOT NULL,
+                        answer TEXT NOT NULL,
+                        citations JSONB,
+                        embedding vector({self._dim}),
+                        created_at TIMESTAMPTZ DEFAULT now()
+                    )
+                    """
+                ))
+                c.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_cache_course ON qa_cache (course_id)"))
+            self._cache_ensured = True
+
+    def cache_lookup(self, course_id: str, embedding: list[float], ttl_days: int) -> dict | None:
+        from sqlalchemy import text
+
+        self._ensure_cache_schema()
+        sql = text(
+            f"""
+            SELECT answer, citations, 1 - (embedding <=> CAST(:qv AS vector)) AS score
+            FROM qa_cache
+            WHERE course_id = :cid
+              AND created_at > now() - make_interval(days => :ttl)
+            ORDER BY embedding <=> CAST(:qv AS vector)
+            LIMIT 1
+            """
+        )
+        with self._engine.connect() as c:
+            row = c.execute(
+                sql, {"cid": course_id, "qv": self._vec_literal(embedding), "ttl": int(ttl_days)}
+            ).mappings().first()
+        if not row:
+            return None
+        return {"answer": row["answer"], "citations": _as_dict_list(row["citations"]), "score": float(row["score"])}
+
+    def cache_store(
+        self, cache_id: str, course_id: str, question: str, answer: str,
+        citations: list, embedding: list[float],
+    ) -> None:
+        import json
+
+        from sqlalchemy import text
+
+        self._ensure_cache_schema()
+        with self._engine.begin() as c:
+            c.execute(
+                text(
+                    """
+                    INSERT INTO qa_cache (id, course_id, question, answer, citations, embedding)
+                    VALUES (:id, :cid, :q, :a, CAST(:cit AS JSONB), CAST(:emb AS vector))
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                ),
+                {
+                    "id": cache_id, "cid": course_id, "q": question[:4000], "a": answer,
+                    "cit": json.dumps(citations), "emb": self._vec_literal(embedding),
+                },
+            )
+
+    def cache_invalidate(self, course_id: str) -> int:
+        from sqlalchemy import text
+
+        self._ensure_cache_schema()
+        with self._engine.begin() as c:
+            res = c.execute(text("DELETE FROM qa_cache WHERE course_id = :cid"), {"cid": course_id})
+        return int(res.rowcount or 0)
+
 
 def _as_dict(meta: Any) -> dict[str, Any]:
     if isinstance(meta, dict):
@@ -316,6 +397,18 @@ def _as_dict(meta: Any) -> dict[str, Any]:
         except Exception:
             return {}
     return {}
+
+
+def _as_dict_list(v: Any) -> list[dict[str, Any]]:
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
 
 
 # ─────────────────────────────────────────────────────────────
@@ -369,3 +462,48 @@ def all_documents(collection_name: str, limit: int = 2000) -> Iterable[dict[str,
 def collection_size(collection_name: str) -> int:
     with _lock:
         return _backend().collection_size(collection_name)
+
+
+# ─────────────────────────────────────────────────────────────
+# Semantic answer cache (pgvector-only; no-op on chroma/sqlite)
+# ─────────────────────────────────────────────────────────────
+def semantic_cache_lookup(
+    course_id: str, question: str, threshold: float, ttl_days: int
+) -> dict[str, Any] | None:
+    """Return {"answer", "citations", "score"} if a past answer for this course
+    is within `threshold` cosine similarity of `question`, else None. Reuses the
+    in-process-cached query embedding, so no extra API call vs. retrieval."""
+    b = _backend()
+    if not isinstance(b, PgVectorBackend) or not question.strip():
+        return None
+    emb = get_embedding_provider().embed([question])
+    if not emb:
+        return None
+    with _lock:
+        hit = b.cache_lookup(course_id, emb[0], ttl_days)
+    if hit and hit["score"] >= threshold:
+        return hit
+    return None
+
+
+def semantic_cache_store(
+    course_id: str, question: str, answer: str, citations: list[dict[str, Any]]
+) -> None:
+    import uuid
+
+    b = _backend()
+    if not isinstance(b, PgVectorBackend) or not (question.strip() and answer.strip()):
+        return
+    emb = get_embedding_provider().embed([question])
+    if not emb:
+        return
+    with _lock:
+        b.cache_store(str(uuid.uuid4()), course_id, question, answer, citations or [], emb[0])
+
+
+def semantic_cache_invalidate(course_id: str) -> int:
+    b = _backend()
+    if not isinstance(b, PgVectorBackend):
+        return 0
+    with _lock:
+        return b.cache_invalidate(course_id)

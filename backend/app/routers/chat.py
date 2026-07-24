@@ -31,6 +31,7 @@ from ..services.llm import (
 )
 from ..services.llm import stream as llm_stream
 from ..services.rag_service import build_rag_prompt, hybrid_retrieve
+from ..services import vector_store
 
 log = logging.getLogger(__name__)
 
@@ -180,56 +181,81 @@ async def chat_stream(
     convo.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    # Do retrieval OUTSIDE the streaming generator so failures surface as HTTP 500
-    retrieved = await asyncio.to_thread(
-        hybrid_retrieve,
-        course,
-        payload.message,
-        None,
-        payload.scoped_material_id,
-    )
-
-    # Build citations payload for the client
-    citations_payload = [
-        {
-            "id": f"cit-{i+1}",
-            "material_id": ch.material_id,
-            "filename": ch.filename,
-            "page": ch.page,
-            "chunk_index": ch.chunk_index,
-            "score": round(ch.score, 4),
-            "source_url": ch.source_url or None,
-            "snippet": (ch.document[:340] + "…") if len(ch.document) > 340 else ch.document,
-        }
-        for i, ch in enumerate(retrieved)
-    ]
-
-    debug_payload: list[dict] = []
-    if payload.debug and (course.teacher_id == current.id or current.role == "admin"):
-        debug_payload = [
-            RagDebugChunk(
-                material_id=ch.material_id,
-                filename=ch.filename,
-                page=ch.page,
-                chunk_index=ch.chunk_index,
-                score=round(ch.score, 4),
-                snippet=ch.document[:800],
-            ).model_dump()
-            for ch in retrieved
-        ]
-
-    # Messages for the LLM
-    recent = [(m.role, m.content) for m in history_rows if m.role in ("user", "assistant")]
-    llm_messages: list[LLMMessage] = build_rag_prompt(
-        course=course,
-        question=payload.message,
-        chunks=retrieved,
-        recent_messages=recent,
-        rag_mode=payload.rag_mode,
-    )
-
     assistant_id = str(uuid.uuid4())
     model_display = chain_display()
+
+    # ── Semantic cache fast-path ────────────────────────────────
+    # A standalone question (fresh chat, unscoped) that's semantically close to a
+    # previously-answered one returns the cached answer instantly — skipping both
+    # retrieval and the LLM. Only new conversations are cacheable, so follow-ups
+    # (which depend on prior turns) always run normally. Fail-open: any cache
+    # error falls straight through to the normal path.
+    cacheable = (
+        settings.semantic_cache_enabled
+        and not payload.conversation_id
+        and not payload.scoped_material_id
+    )
+    cache_hit: dict | None = None
+    if cacheable:
+        try:
+            cache_hit = await asyncio.to_thread(
+                vector_store.semantic_cache_lookup,
+                course_id,
+                payload.message,
+                settings.semantic_cache_threshold,
+                settings.semantic_cache_ttl_days,
+            )
+        except Exception as e:  # noqa: BLE001 — cache is best-effort
+            log.warning("Semantic cache lookup failed: %s", e)
+            cache_hit = None
+
+    debug_payload: list[dict] = []
+    llm_messages: list[LLMMessage] = []
+
+    if cache_hit:
+        citations_payload = cache_hit.get("citations") or []
+    else:
+        # Retrieval runs OUTSIDE the streaming generator so failures surface as HTTP 500.
+        retrieved = await asyncio.to_thread(
+            hybrid_retrieve,
+            course,
+            payload.message,
+            None,
+            payload.scoped_material_id,
+        )
+        citations_payload = [
+            {
+                "id": f"cit-{i+1}",
+                "material_id": ch.material_id,
+                "filename": ch.filename,
+                "page": ch.page,
+                "chunk_index": ch.chunk_index,
+                "score": round(ch.score, 4),
+                "source_url": ch.source_url or None,
+                "snippet": (ch.document[:340] + "…") if len(ch.document) > 340 else ch.document,
+            }
+            for i, ch in enumerate(retrieved)
+        ]
+        if payload.debug and (course.teacher_id == current.id or current.role == "admin"):
+            debug_payload = [
+                RagDebugChunk(
+                    material_id=ch.material_id,
+                    filename=ch.filename,
+                    page=ch.page,
+                    chunk_index=ch.chunk_index,
+                    score=round(ch.score, 4),
+                    snippet=ch.document[:800],
+                ).model_dump()
+                for ch in retrieved
+            ]
+        recent = [(m.role, m.content) for m in history_rows if m.role in ("user", "assistant")]
+        llm_messages = build_rag_prompt(
+            course=course,
+            question=payload.message,
+            chunks=retrieved,
+            recent_messages=recent,
+            rag_mode=payload.rag_mode,
+        )
 
     async def event_stream():
         # Open frames: tell client which conversation + meta
@@ -239,8 +265,9 @@ async def chat_stream(
                 "conversation_id": convo.id,
                 "message_id": assistant_id,
                 "user_message_id": user_msg.id,
-                "model": model_display,
+                "model": "semantic-cache" if cache_hit else model_display,
                 "ai_name": course.ai_name,
+                "cached": bool(cache_hit),
             },
         )
         if citations_payload:
@@ -248,36 +275,52 @@ async def chat_stream(
         if debug_payload:
             yield _sse("debug", {"chunks": debug_payload})
 
-        buf_parts: list[str] = []
-        try:
-            async for delta in llm_stream(llm_messages, user_id=current.id):
-                if not delta:
-                    continue
-                buf_parts.append(delta)
-                yield _sse("delta", {"text": delta})
-                # Give up the event loop so cancellations land
-                await asyncio.sleep(0)
-        except asyncio.CancelledError:
-            log.info("Client cancelled chat stream conversation=%s", convo.id)
-            raise
-        except LLMQuotaError as e:
-            yield _sse("error", {"message": str(e)})
-        except LLMUnavailableError as e:
-            # Generic message + a short, secret-redacted reason so an operator can
-            # see WHY the chain failed (e.g. "HTTP 404: model not found") without
-            # digging through server logs. `detail` never contains keys/prompts.
-            detail = getattr(e, "detail", "")
-            log.warning("LLM chain unavailable: %s", detail or e)
-            msg = "The AI service is temporarily unavailable. Please try again."
-            if detail:
-                msg = f"{msg} (reason: {detail})"
-            yield _sse("error", {"message": msg})
-        except Exception as e:
-            # Never leak raw provider errors to the client.
-            log.exception("LLM streaming error: %s", e)
-            yield _sse("error", {"message": "The AI service is temporarily unavailable. Please try again."})
+        if cache_hit:
+            # Instant answer from the semantic cache — no retrieval, no LLM.
+            full = (cache_hit.get("answer") or "").strip()
+            if full:
+                yield _sse("delta", {"text": full})
+        else:
+            buf_parts: list[str] = []
+            try:
+                async for delta in llm_stream(llm_messages, user_id=current.id):
+                    if not delta:
+                        continue
+                    buf_parts.append(delta)
+                    yield _sse("delta", {"text": delta})
+                    # Give up the event loop so cancellations land
+                    await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                log.info("Client cancelled chat stream conversation=%s", convo.id)
+                raise
+            except LLMQuotaError as e:
+                yield _sse("error", {"message": str(e)})
+            except LLMUnavailableError as e:
+                # Generic message + a short, secret-redacted reason so an operator can
+                # see WHY the chain failed (e.g. "HTTP 404: model not found") without
+                # digging through server logs. `detail` never contains keys/prompts.
+                detail = getattr(e, "detail", "")
+                log.warning("LLM chain unavailable: %s", detail or e)
+                msg = "The AI service is temporarily unavailable. Please try again."
+                if detail:
+                    msg = f"{msg} (reason: {detail})"
+                yield _sse("error", {"message": msg})
+            except Exception as e:
+                # Never leak raw provider errors to the client.
+                log.exception("LLM streaming error: %s", e)
+                yield _sse("error", {"message": "The AI service is temporarily unavailable. Please try again."})
 
-        full = "".join(buf_parts).strip()
+            full = "".join(buf_parts).strip()
+
+            # Cache a fresh, non-empty answer so the next similar question is instant.
+            if cacheable and full:
+                try:
+                    await asyncio.to_thread(
+                        vector_store.semantic_cache_store,
+                        course_id, payload.message, full, citations_payload,
+                    )
+                except Exception as e:  # noqa: BLE001 — cache is best-effort
+                    log.warning("Semantic cache store failed: %s", e)
 
         # Persist the assistant message in a fresh session (the request session is stale).
         async with SessionLocal() as write_db:

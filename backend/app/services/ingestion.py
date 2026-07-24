@@ -176,8 +176,20 @@ async def run_ingestion_job(job_id: str) -> None:
             material.chunk_count = len(chunks)
             material.page_count = len(pages)
             await db.commit()
+
+    # The course's knowledge changed → drop any semantically-cached answers so
+    # they can't go stale against the new material. Best-effort.
+    try:
+        await asyncio.to_thread(vector_store.semantic_cache_invalidate, course_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Semantic cache invalidation failed for course %s: %s", course_id, e)
     log.info("Ingestion done: job=%s material=%s chunks=%d pages=%d", job_id, material_id, len(chunks), len(pages))
 
 
 async def delete_material_chunks(course: Course, material_id: str) -> None:
     await asyncio.to_thread(vector_store.delete_by_material, course.collection_name, material_id)
+    # Removing material changes the course's knowledge → clear cached answers.
+    try:
+        await asyncio.to_thread(vector_store.semantic_cache_invalidate, course.id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Semantic cache invalidation failed for course %s: %s", course.id, e)
