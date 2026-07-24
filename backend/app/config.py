@@ -190,6 +190,28 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────
     # Validators
     # ─────────────────────────────────────────────────────
+    @field_validator(
+        "gemini_api_key",
+        "openrouter_api_key",
+        "openai_api_key",
+        "anthropic_api_key",
+        "groq_api_key",
+        "openrouter_base_url",
+        "openai_base_url",
+        "groq_base_url",
+        "database_url",
+        "firebase_project_id",
+        mode="before",
+    )
+    @classmethod
+    def _strip_secret(cls, v):
+        """Trim whitespace from credentials/URLs. A trailing newline or space
+        (common copy-paste artifact when pasting into a dashboard) makes an
+        API key an *illegal HTTP/2 header value*, which gRPC rejects with
+        "Illegal header value" — silently breaking every Gemini call. Stripping
+        here makes the whole app resilient to that class of paste error."""
+        return v.strip() if isinstance(v, str) else v
+
     @field_validator("jwt_secret", mode="before")
     @classmethod
     def _resolve_jwt_secret(cls, v: str) -> str:
