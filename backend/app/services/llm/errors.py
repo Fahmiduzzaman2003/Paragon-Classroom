@@ -17,10 +17,17 @@ class Decision(str, Enum):
 
 
 class LLMUnavailableError(Exception):
-    """Raised when the whole chain fails. Carries only a safe, generic message —
-    raw provider errors (which can leak keys/prompts) are logged, never surfaced."""
+    """Raised when the whole chain fails. The message is safe/generic; ``detail``
+    is a short, secret-redacted hint (e.g. "HTTP 404: model not found") that the
+    caller MAY surface to help an operator debug — raw provider errors (which can
+    leak keys/prompts) are never put here."""
 
-    def __init__(self, message: str = "The AI service is temporarily unavailable. Please try again in a moment.") -> None:
+    def __init__(
+        self,
+        message: str = "The AI service is temporarily unavailable. Please try again in a moment.",
+        detail: str = "",
+    ) -> None:
+        self.detail = detail
         super().__init__(message)
 
 
@@ -47,6 +54,22 @@ def _status_of(exc: Exception) -> int | None:
         if isinstance(v, int):
             return v
     return None
+
+
+def safe_reason(exc: Exception | None) -> str:
+    """A short, secret-redacted description of a provider failure, suitable for
+    showing to an operator. Redacts anything that looks like an API key and caps
+    the length so prompt text can't leak."""
+    if exc is None:
+        return "no provider was tried (circuit breaker open — wait ~60s and retry)"
+    import re
+
+    status = _status_of(exc)
+    m = str(exc)
+    # Redact obvious secrets (Google AIza…, OpenAI/OpenRouter sk-…, long tokens).
+    m = re.sub(r"(AIza[0-9A-Za-z_\-]{10,}|sk-[0-9A-Za-z_\-]{10,})", "***", m)
+    m = " ".join(m.split())[:280]
+    return f"{type(exc).__name__}" + (f" HTTP {status}" if status else "") + (f": {m}" if m else "")
 
 
 def classify(exc: Exception) -> Decision:

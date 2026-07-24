@@ -20,7 +20,7 @@ from ...config import settings
 from . import quota
 from .base import LLMProvider, Message
 from .breaker import CircuitBreaker
-from .errors import Decision, LLMUnavailableError, classify
+from .errors import Decision, LLMUnavailableError, classify, safe_reason
 from .factory import create_provider
 
 log = logging.getLogger("paragon.llm")
@@ -195,7 +195,7 @@ async def stream(
                       latency_ms=int((time.monotonic() - t0) * 1000), tokens_in=tokens_in,
                       tokens_out=0, user_id=user_id, error_class=f"{type(e).__name__}:{decision.value}")
             if decision == Decision.FAIL_FAST:
-                raise LLMUnavailableError() from e
+                raise LLMUnavailableError(detail=safe_reason(e)) from e
             continue
 
         # First token arrived — commit to this provider.
@@ -219,7 +219,7 @@ async def stream(
         return
 
     log.error("All LLM providers failed before first token; last error: %s", last_err)
-    raise LLMUnavailableError()
+    raise LLMUnavailableError(detail=safe_reason(last_err))
 
 
 # ─────────────────────────────────────────────────────

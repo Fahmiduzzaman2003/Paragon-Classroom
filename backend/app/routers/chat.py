@@ -25,6 +25,7 @@ from ..schemas.chat import (
 )
 from ..services.llm import (
     LLMQuotaError,
+    LLMUnavailableError,
     Message as LLMMessage,
     chain_display,
 )
@@ -261,6 +262,16 @@ async def chat_stream(
             raise
         except LLMQuotaError as e:
             yield _sse("error", {"message": str(e)})
+        except LLMUnavailableError as e:
+            # Generic message + a short, secret-redacted reason so an operator can
+            # see WHY the chain failed (e.g. "HTTP 404: model not found") without
+            # digging through server logs. `detail` never contains keys/prompts.
+            detail = getattr(e, "detail", "")
+            log.warning("LLM chain unavailable: %s", detail or e)
+            msg = "The AI service is temporarily unavailable. Please try again."
+            if detail:
+                msg = f"{msg} (reason: {detail})"
+            yield _sse("error", {"message": msg})
         except Exception as e:
             # Never leak raw provider errors to the client.
             log.exception("LLM streaming error: %s", e)
