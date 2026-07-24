@@ -131,7 +131,7 @@ class Settings(BaseSettings):
     # ── LLM ────────────────────────────────────────────
     # Single-provider selector (legacy). The fallback chain below supersedes it
     # when set. Kept so ``mock`` still runs the whole app with zero keys.
-    llm_provider: Literal["openai", "openrouter", "anthropic", "gemini", "groq", "mock"] = "mock"
+    llm_provider: Literal["openai", "openrouter", "anthropic", "gemini", "groq", "mistral", "mock"] = "mock"
     llm_model: str = ""
     # Ordered, comma-separated fallback chain, e.g.
     #   gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,openrouter:meta-llama/llama-3.3-70b-instruct:free
@@ -155,6 +155,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    mistral_api_key: str = ""
+    mistral_base_url: str = "https://api.mistral.ai/v1"
 
     # ── Embeddings ─────────────────────────────────────
     # ``local`` = ChromaDB ONNX MiniLM (dev only, heavy on 512 MB).
@@ -196,9 +198,11 @@ class Settings(BaseSettings):
         "openai_api_key",
         "anthropic_api_key",
         "groq_api_key",
+        "mistral_api_key",
         "openrouter_base_url",
         "openai_base_url",
         "groq_base_url",
+        "mistral_base_url",
         "database_url",
         "firebase_project_id",
         mode="before",
@@ -362,13 +366,15 @@ class Settings(BaseSettings):
         return "local" if self.app_env == "development" else "cloudinary"
 
     @property
-    def active_llm_provider(self) -> Literal["openai", "openrouter", "anthropic", "gemini", "groq", "mock"]:
+    def active_llm_provider(self) -> Literal["openai", "openrouter", "anthropic", "gemini", "groq", "mistral", "mock"]:
         """Resolve the single runtime LLM provider (used when no fallback chain
         is configured). Promotes a real provider when only its key is present."""
         if self.llm_provider != "mock":
             return self.llm_provider
         if self.gemini_api_key.strip():
             return "gemini"
+        if self.mistral_api_key.strip():
+            return "mistral"
         if self.groq_api_key.strip():
             return "groq"
         if self.openrouter_api_key.strip():

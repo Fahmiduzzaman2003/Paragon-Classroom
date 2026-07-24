@@ -40,6 +40,15 @@ def create_provider(name: str, model: str) -> LLMProvider | None:
             from .openrouter_provider import OpenRouterProvider
 
             return OpenRouterProvider(settings.openrouter_api_key, model, settings.openrouter_base_url)
+        if name == "mistral":
+            # Mistral exposes an OpenAI-compatible API, so we reuse the OpenAI adapter.
+            if not settings.mistral_api_key:
+                return None
+            from .openai_provider import OpenAIProvider
+
+            p = OpenAIProvider(settings.mistral_api_key, model or "mistral-small-latest", settings.mistral_base_url)
+            p.name = "mistral"
+            return p
         if name == "anthropic":
             if not settings.anthropic_api_key:
                 return None
