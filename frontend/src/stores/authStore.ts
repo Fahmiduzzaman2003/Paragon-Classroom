@@ -18,6 +18,13 @@ interface AuthState {
     role: 'teacher' | 'student'
     institution?: string
   }) => Promise<void>
+  /** Real Google OIDC code-flow. The frontend redirects to Google, then posts
+   * the `code` + `state` to /auth/google/callback to exchange for tokens. */
+  loginWithGoogle: (code: string, state: string) => Promise<void>
+  /** Dev fallback for offline demos: posts an email to /auth/google/dev and
+   * receives Paragon tokens directly. Always 503s when real Google creds
+   * are configured. */
+  loginWithGoogleDev: (email: string, name?: string) => Promise<void>
   logout: () => void
   setUser: (user: User) => void
   setTokens: (access: string, refresh: string) => void
@@ -64,6 +71,24 @@ export const useAuthStore = create<AuthState>()(
 
       async register(payload) {
         const { data } = await axios.post<TokenPair>(`${API_URL}/auth/register`, payload)
+        const user = await fetchMe(data.access_token)
+        set({ accessToken: data.access_token, refreshToken: data.refresh_token, user })
+      },
+
+      async loginWithGoogle(code, state) {
+        const { data } = await axios.post<TokenPair>(`${API_URL}/auth/google/callback`, {
+          code,
+          state,
+        })
+        const user = await fetchMe(data.access_token)
+        set({ accessToken: data.access_token, refreshToken: data.refresh_token, user })
+      },
+
+      async loginWithGoogleDev(email, name) {
+        const { data } = await axios.post<TokenPair>(`${API_URL}/auth/google/dev`, {
+          email,
+          name,
+        })
         const user = await fetchMe(data.access_token)
         set({ accessToken: data.access_token, refreshToken: data.refresh_token, user })
       },

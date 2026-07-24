@@ -67,6 +67,36 @@ def decode_token(token: str, expected_type: TokenType = "access") -> dict[str, A
 
 
 # ─────────────────────────────────────────────────────
+# OAuth state (stateless CSRF nonce — survives restarts/cold starts)
+# ─────────────────────────────────────────────────────
+
+def create_state_token(extra: dict[str, Any] | None = None, ttl_seconds: int = 600) -> str:
+    """Sign a short-lived state token for the OAuth round-trip.
+
+    Encoding the state as a signed JWT (instead of a server-side dict) means an
+    in-flight login survives a Render cold start / redeploy between the redirect
+    and the callback — no "invalid state" purely because the box slept.
+    """
+    now = datetime.now(tz=timezone.utc)
+    payload: dict[str, Any] = {
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
+        "typ": "oauth_state",
+        "nonce": secrets.token_urlsafe(12),
+    }
+    if extra:
+        payload.update(extra)
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_state_token(token: str) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    if payload.get("typ") != "oauth_state":
+        raise JWTError("not an oauth_state token")
+    return payload
+
+
+# ─────────────────────────────────────────────────────
 # Course join code
 # ─────────────────────────────────────────────────────
 

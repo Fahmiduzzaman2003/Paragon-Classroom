@@ -1,0 +1,9 @@
+# Local development dependencies.
+# Adds the zero-key local RAG path (ChromaDB + bundled ONNX MiniLM embeddings)
+# and the test toolchain. NEVER install these on Render Free — onnxruntime will
+# push the process over the 512 MB limit.
+-r requirements.txt
+
+chromadb>=0.5.15
+pytest>=8.0
+pytest-asyncio>=0.24

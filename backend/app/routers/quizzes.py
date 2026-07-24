@@ -17,7 +17,7 @@ from ..config import settings
 from ..dependencies import CurrentUser, Database, assert_enrolled, require_teacher
 from ..models.course import Course
 from ..models.enrollment import Enrollment
-from ..models.quiz import Attempt, AttemptAttachment, Question, Quiz, QuizStatus
+from ..models.quiz import Attempt, AttemptAttachment, Question, QuestionType, Quiz, QuizStatus
 from ..models.user import Role, User
 from ..schemas.quiz import (
     AnswerInput,
@@ -44,8 +44,10 @@ from ..schemas.quiz import (
     ViolationInput,
 )
 from ..services.grading import grade_answer
+from ..services.llm_grading import grade_written_answer
 from ..services.notifications import notify_course
 from ..services.quiz_generator import generate_quiz_questions
+from ..services.storage import get_storage
 from ..models.event import CalendarEvent
 
 log = logging.getLogger(__name__)
@@ -570,21 +572,64 @@ async def submit_attempt(
     if attempt.student_id != current.id:
         raise HTTPException(status_code=403, detail="Not your attempt")
     if attempt.submitted_at is not None:
+        # Idempotent retry: same client key returns the original result instead
+        # of a spurious 409 after a cold-start / flaky-network re-POST.
+        if payload.idempotency_key and attempt.idempotency_key == payload.idempotency_key:
+            return _result_payload(attempt)
         raise HTTPException(status_code=409, detail="Attempt already submitted")
 
     quiz = await _quiz_or_404(db, attempt.quiz_id, with_questions=True)
     by_id = {q.id: q for q in quiz.questions}
 
+    # Server is the source of truth for time. Late = past the timer + grace.
+    now = datetime.now(timezone.utc)
+    started = attempt.started_at if attempt.started_at.tzinfo else attempt.started_at.replace(tzinfo=timezone.utc)
+    elapsed_s = (now - started).total_seconds()
+    allowed_s = quiz.duration_min * 60 + settings.exam_grace_period_s
+    is_late = elapsed_s > allowed_s
+
     answers_map: dict[str, AnswerInput] = {a.question_id: a for a in payload.answers}
     graded_map: dict[str, dict] = {}
     score = 0
     needs_manual = False
+    grading_model = ""
 
     for q in quiz.questions:
         ans = answers_map.get(q.id)
         selected = list(ans.selected) if ans else []
         text = (ans.text if ans else "") or ""
         result = grade_answer(q, selected, text)
+
+        # Rubric-driven LLM grading for essays (when a real provider is configured
+        # and the teacher supplied model answers). Success → auto grade with a
+        # justification; any failure → fall through to the manual-review queue.
+        if q.type == QuestionType.ESSAY.value and text.strip():
+            model_answers = [r for r in (q.correct or []) if isinstance(r, str) and r.strip()]
+            if model_answers:
+                llm_grade = await grade_written_answer(
+                    question=q.body,
+                    student_answer=text,
+                    model_answers=model_answers,
+                    max_points=int(q.points),
+                    user_id=current.id,
+                )
+                if llm_grade is not None:
+                    grading_model = llm_grade.model_used
+                    graded_map[q.id] = {
+                        "correct": llm_grade.points >= int(q.points),
+                        "points": llm_grade.points,
+                        "max_points": llm_grade.max_points,
+                        "feedback": llm_grade.justification or "AI-graded",
+                        "criteria": [c.model_dump() for c in llm_grade.criteria],
+                        "auto": True,
+                        # Teacher can still confirm AI grades before release.
+                        "reviewed": False,
+                        "explanation": q.explanation or "",
+                    }
+                    score += llm_grade.points
+                    needs_manual = True  # surfaced for teacher confirmation
+                    continue
+
         if not result.auto:
             needs_manual = True
         score += result.points
@@ -605,7 +650,11 @@ async def submit_attempt(
     attempt.score = score
     attempt.max_score = sum(q.points for q in quiz.questions)
     attempt.needs_manual_grading = needs_manual
-    attempt.submitted_at = datetime.now(timezone.utc)
+    attempt.submitted_at = now
+    attempt.late = is_late
+    attempt.idempotency_key = payload.idempotency_key
+    attempt.grading_model = grading_model
+    attempt.rubric_version = settings.grading_rubric_version if grading_model else ""
     await db.commit()
     await db.refresh(attempt)
 
@@ -897,10 +946,8 @@ _ALLOWED_ATTACHMENT_MIMES = {
 _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-def _attempt_upload_dir(attempt_id: str) -> Path:
-    base = Path(settings.uploads_dir) / "exam_submissions" / attempt_id
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+def _attempt_upload_folder(attempt_id: str) -> str:
+    return f"exam_submissions/{attempt_id}"
 
 
 @router.post(
@@ -939,18 +986,34 @@ async def upload_attachment(
 
     safe_name = (file.filename or "upload").replace("/", "_").replace("\\", "_")
     fid = str(uuid.uuid4())
-    target_dir = _attempt_upload_dir(attempt_id)
-    target_path = target_dir / f"{fid}_{safe_name}"
-    target_path.write_bytes(payload)
+    folder = _attempt_upload_folder(attempt_id)
+
+    async def _iter():
+        yield payload
+        await file.close()
+
+    try:
+        stored = await get_storage().save(
+            stream=_iter(),
+            filename=safe_name,
+            mime=mime,
+            folder=folder,
+            key_hint=fid,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=413, detail=str(e)) from None
+    except Exception as e:
+        log.exception("Attempt attachment upload failed")
+        raise HTTPException(status_code=502, detail=f"Upload storage failed: {e}") from None
 
     att = AttemptAttachment(
         id=fid,
         attempt_id=attempt_id,
         question_id=question_id,
         filename=safe_name,
-        path=str(target_path),
+        path=stored.url,
         mime=mime,
-        size=len(payload),
+        size=stored.size,
     )
     db.add(att)
     await db.commit()
@@ -1017,10 +1080,8 @@ _QUESTION_IMAGE_MIMES = {
 _MAX_QUESTION_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
 
 
-def _question_image_dir(question_id: str) -> Path:
-    base = Path(settings.uploads_dir) / "question_images" / question_id
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+def _question_image_folder(question_id: str) -> str:
+    return f"question_images/{question_id}"
 
 
 @router.post(
@@ -1053,17 +1114,29 @@ async def upload_question_image(
     # Replace any prior image so each question only ever has one stored file.
     prior = getattr(question, "image_path", None)
     if prior:
-        try:
-            Path(prior).unlink(missing_ok=True)
-        except OSError:
-            pass
+        await get_storage().delete(prior)
 
     safe_name = (file.filename or "image").replace("/", "_").replace("\\", "_")
-    target_dir = _question_image_dir(question_id)
-    target_path = target_dir / f"{uuid.uuid4()}_{safe_name}"
-    target_path.write_bytes(payload)
+    folder = _question_image_folder(question_id)
 
-    question.image_path = str(target_path)
+    async def _iter():
+        yield payload
+        await file.close()
+
+    try:
+        stored = await get_storage().save(
+            stream=_iter(),
+            filename=safe_name,
+            mime=mime,
+            folder=folder,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=413, detail=str(e)) from None
+    except Exception as e:
+        log.exception("Question image upload failed")
+        raise HTTPException(status_code=502, detail=f"Upload storage failed: {e}") from None
+
+    question.image_path = stored.url
     question.image_mime = mime
     await db.commit()
     await db.refresh(question)

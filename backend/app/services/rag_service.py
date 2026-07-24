@@ -110,12 +110,18 @@ def hybrid_retrieve(
 
     top_ids = [did for did, _ in fused[:k]]
 
+    floor = settings.rag_similarity_floor
     chunks: list[RetrievedChunk] = []
     for did in top_ids:
         hit = by_id[did]
         meta = hit["metadata"] or {}
-        # Prefer vector score (it's bounded [0,1]); fall back to BM25-normalised
+        # Prefer vector score (it's bounded [0,1]); fall back to BM25-normalised.
         display_score = by_id[did].get("score", 0.0) or bm25_scores.get(did, 0.0)
+        # Similarity floor: drop weak matches so we don't feed noise to the model
+        # (and, in strict mode, so it honestly says it couldn't find the answer).
+        # A strong keyword (BM25) hit can rescue a low vector score.
+        if float(display_score) < floor and bm25_scores.get(did, 0.0) < 0.5:
+            continue
         chunks.append(
             RetrievedChunk(
                 material_id=meta.get("material_id", ""),
@@ -141,13 +147,26 @@ def build_rag_prompt(
     mode = (rag_mode or course.rag_mode or "balanced").lower()
     instruction = _RAG_MODE_INSTRUCTIONS.get(mode, _RAG_MODE_INSTRUCTIONS["balanced"])
 
-    # Render sources as a numbered block the model can cite.
+    # Assemble a token-budgeted source block. Chunks arrive most-relevant-first,
+    # so we keep taking them until the budget is spent, then stop — a
+    # deterministic trim that can never overflow the model window.
+    budget = settings.rag_context_budget_tokens
+    used = 0
     source_block_parts: list[str] = []
+    dropped = 0
     for i, ch in enumerate(chunks, start=1):
         header = f"[{i}] {ch.filename} (page {ch.page})"
         if ch.source_url:
             header = f"{header} - {ch.source_url}"
-        source_block_parts.append(f"{header}\n{ch.document.strip()}")
+        body = f"{header}\n{ch.document.strip()}"
+        cost = max(1, len(body) // 4)  # ~4 chars/token
+        if used + cost > budget and source_block_parts:
+            dropped = len(chunks) - (i - 1)
+            break
+        source_block_parts.append(body)
+        used += cost
+    if dropped:
+        log.info("RAG context trimmed: kept %d chunk(s), dropped %d over budget", len(source_block_parts), dropped)
     source_block = "\n\n".join(source_block_parts) if source_block_parts else "(no sources retrieved)"
 
     personality = course.ai_personality.strip() or (

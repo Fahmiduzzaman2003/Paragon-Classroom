@@ -80,22 +80,26 @@ export function Dashboard() {
               : 'Create or join your first course to meet your AI assistant.'}
           </p>
           <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <GlassButton variant="glass" size="md" onClick={() => setJoinOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Join course
-            </GlassButton>
+            {user?.role === 'student' && (
+              <GlassButton variant="glass" size="md" onClick={() => setJoinOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Join course
+              </GlassButton>
+            )}
             {user?.role === 'teacher' && (
               <GlassButton size="md" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" />
                 New course
               </GlassButton>
             )}
-            <GlassButton asChild variant="ghost" size="md">
-              <Link to="/app/exam/join">
-                <BookOpenCheck className="h-4 w-4" />
-                Join an exam
-              </Link>
-            </GlassButton>
+            {user?.role === 'student' && (
+              <GlassButton asChild variant="ghost" size="md">
+                <Link to="/app/exam/join">
+                  <BookOpenCheck className="h-4 w-4" />
+                  Join an exam
+                </Link>
+              </GlassButton>
+            )}
           </div>
         </div>
         <DailyDose />
@@ -182,7 +186,7 @@ export function Dashboard() {
                     className="mt-2"
                     onClick={() => (user?.role === 'teacher' ? setCreateOpen(true) : setJoinOpen(true))}
                   >
-                    {user?.role === 'teacher' ? 'New course' : 'Enter code'}
+                    {user?.role === 'teacher' ? 'New course' : (user?.role === 'student' ? 'Enter code' : '')}
                   </GlassButton>
                 </GlassCard>
               </motion.div>
@@ -304,7 +308,9 @@ export function Dashboard() {
         </div>
       </div>
 
-      <JoinCourseModal open={joinOpen} onOpenChange={setJoinOpen} />
+      {user?.role === 'student' && (
+        <JoinCourseModal open={joinOpen} onOpenChange={setJoinOpen} />
+      )}
       <CreateCourseModal open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )

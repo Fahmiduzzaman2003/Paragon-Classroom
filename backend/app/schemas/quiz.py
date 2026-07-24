@@ -125,6 +125,8 @@ class AttemptStartOut(BaseModel):
 
 class AttemptSubmitInput(BaseModel):
     answers: list[AnswerInput] = []
+    # Optional client-generated key for idempotent submission (retry-safe).
+    idempotency_key: str | None = None
 
 
 class GradedQuestion(BaseModel):

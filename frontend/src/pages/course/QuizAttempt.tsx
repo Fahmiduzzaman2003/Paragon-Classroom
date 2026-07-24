@@ -4,8 +4,9 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Edit3,
   Eye,
@@ -15,12 +16,17 @@ import {
   ListChecks,
   Loader2,
   LogOut,
+  Maximize2,
   Paperclip,
   Send,
+  Shield,
   Sparkles,
+  Target,
   Trash2,
+  Trophy,
   Upload,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -29,7 +35,6 @@ import rehypeKatex from 'rehype-katex'
 import { GlassCard } from '@/components/glass/GlassCard'
 import { GlassButton } from '@/components/glass/GlassButton'
 import { GlassTextarea } from '@/components/glass/GlassInput'
-import { Progress } from '@/components/ui/Progress'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { QuestionImage } from '@/components/quiz/QuestionImage'
@@ -172,59 +177,128 @@ function WaitingRoom({
     !!quiz.startAt && (s?.status === 'scheduled' || (typeof localRemaining === 'number' && localRemaining > 0))
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-xl mx-auto space-y-4">
       <Link
         to={`/app/courses/${courseId}/quizzes`}
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-3"
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition mb-1"
       >
         <ArrowLeft className="h-3 w-3" /> Back to quizzes
       </Link>
-      <GlassCard padding="lg" strong className="relative overflow-hidden">
-        <div className="pointer-events-none absolute -top-16 -right-12 h-44 w-44 rounded-full bg-[#815AFF]/30 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 -left-8 h-44 w-44 rounded-full bg-[#00C8FF]/20 blur-3xl" />
-        <div className="relative">
-          <h1 className="font-display text-2xl font-semibold">{quiz.title}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{quiz.description}</p>
-          <ul className="mt-4 space-y-1 text-xs text-muted-foreground">
-            <li>• Duration: {quiz.durationMin} minutes</li>
-            <li>• Questions: {quiz.questionCount}</li>
-            <li>• Total points: {quiz.totalPoints}</li>
-            <li>• Retakes: {quiz.allowRetake ? 'allowed' : 'not allowed'}</li>
-            {quiz.proctoringEnabled && (
-              <li className="text-amber-300">
-                • Lockdown / proctoring is enabled — you'll go fullscreen and
-                copy-paste, tab switches and dev tools will be flagged.
-              </li>
-            )}
-          </ul>
 
-          {isScheduled ? (
-            <div className="mt-5 rounded-2xl bg-gradient-to-br from-[#815AFF]/20 to-[#00C8FF]/10 ring-1 ring-white/15 p-4 text-center">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                Live exam — starts in
-              </div>
-              <div className="font-mono text-4xl font-semibold tabular-nums leading-none text-white">
-                {formatHMS(localRemaining ?? 0)}
-              </div>
-              <div className="text-[11px] text-muted-foreground mt-2">
-                Auto-launch at{' '}
-                <span className="text-foreground font-medium">
-                  {quiz.startAt ? new Date(quiz.startAt).toLocaleString() : '—'}
-                </span>
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                Keep this tab open. The exam will start automatically — no need
-                to refresh.
-              </p>
+      <div className="flex items-center gap-2">
+        <div className="section-eyebrow">
+          <Target className="h-3 w-3" /> Assessment
+        </div>
+        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+        <span className="text-[11px] text-muted-foreground">
+          {quiz.proctoringEnabled ? 'Proctored' : 'Open session'}
+        </span>
+      </div>
+
+      <GlassCard padding="lg" strong className="relative overflow-hidden">
+        {/* Decorative orbs */}
+        <div className="pointer-events-none absolute -top-20 -right-12 h-56 w-56 rounded-full bg-[#815AFF]/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-12 h-56 w-56 rounded-full bg-[#00C8FF]/25 blur-3xl" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-32 w-32 rounded-full bg-[#FF46BE]/15 blur-3xl" />
+
+        <div className="relative">
+          {/* Header */}
+          <div className="flex items-start gap-3">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#815AFF] via-[#FF46BE] to-[#00C8FF] flex items-center justify-center text-white shadow-lg shrink-0">
+              <Trophy className="h-5 w-5" />
             </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="font-display text-2xl font-semibold leading-tight">
+                {quiz.title}
+              </h1>
+              {quiz.description && (
+                <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                  {quiz.description}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Stats grid */}
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { icon: Clock, label: 'Duration', value: `${quiz.durationMin}m` },
+              { icon: ListChecks, label: 'Questions', value: String(quiz.questionCount) },
+              { icon: Target, label: 'Total pts', value: String(quiz.totalPoints) },
+              {
+                icon: quiz.allowRetake ? Sparkles : AlertTriangle,
+                label: 'Retakes',
+                value: quiz.allowRetake ? 'Allowed' : 'Once',
+              },
+            ].map(({ icon: Icon, label, value }) => (
+              <div
+                key={label}
+                className="rounded-xl glass px-3 py-2.5 hover:bg-white/[0.06] transition"
+              >
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </div>
+                <div className="text-base font-semibold tabular-nums mt-0.5">
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Proctoring warning */}
+          {quiz.proctoringEnabled && (
+            <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3.5 py-3 flex items-start gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-amber-400/20 ring-1 ring-amber-400/40 flex items-center justify-center shrink-0">
+                <Shield className="h-3.5 w-3.5 text-amber-200" />
+              </div>
+              <div className="text-xs text-amber-100/90 leading-relaxed">
+                <div className="font-semibold mb-0.5">Lockdown mode is active</div>
+                You'll be placed in fullscreen — copy/paste, tab switching and developer tools are flagged.
+              </div>
+            </div>
+          )}
+
+          {/* Countdown or CTA */}
+          {isScheduled ? (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6 rounded-2xl bg-gradient-to-br from-[#815AFF]/20 via-[#FF46BE]/10 to-[#00C8FF]/15 ring-1 ring-white/15 p-5 text-center relative overflow-hidden"
+            >
+              <div className="pointer-events-none absolute inset-0 bg-dots opacity-30" />
+              <div className="relative">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2 flex items-center justify-center gap-1.5">
+                  <Zap className="h-3 w-3 text-amber-300" />
+                  Live exam starts in
+                </div>
+                <div className="font-mono text-5xl font-semibold tabular-nums leading-none text-white tracking-tight">
+                  {formatHMS(localRemaining ?? 0)}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-3">
+                  Auto-launch at{' '}
+                  <span className="text-foreground font-medium">
+                    {quiz.startAt ? new Date(quiz.startAt).toLocaleString() : '—'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2 italic">
+                  Keep this tab open — the exam will start automatically.
+                </p>
+              </div>
+            </motion.div>
           ) : (
             <GlassButton
-              className="mt-5 w-full"
+              className="mt-6 w-full"
+              size="lg"
               disabled={starting || (s ? !s.canStart : false)}
               onClick={onStart}
             >
-              {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
-              {starting ? 'Starting…' : 'Start now'}
+              {starting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {starting ? 'Starting…' : 'Begin assessment'}
             </GlassButton>
           )}
         </div>
@@ -503,12 +577,25 @@ function RunningAttempt({
   }
 
   // ─── Reused inside the sidebar (desktop) and the mobile drawer ────────────
+  // Circular SVG timer ring — gives the exam window a professional dashboard feel.
+  const ringR = 34
+  const ringC = 2 * Math.PI * ringR
+  const ringPct = Math.max(0, Math.min(1, 1 - elapsedRatio))
+  const ringColor = danger
+    ? '#fb7185' // rose
+    : warn
+      ? '#fbbf24' // amber
+      : caution
+        ? '#fde68a' // yellow
+        : '#34d399' // emerald
+  const ringGradientId = `timer-ring-grad-${danger ? 'd' : warn ? 'w' : caution ? 'c' : 's'}`
+
   const TimerBlock = (
     <div
       className={cn(
-        'rounded-2xl px-3 py-3 transition-colors',
+        'rounded-2xl px-3 py-4 transition-colors relative overflow-hidden',
         danger
-          ? 'bg-gradient-to-br from-rose-500/30 to-rose-700/10 ring-2 ring-rose-500/50 animate-pulse-soft'
+          ? 'bg-gradient-to-br from-rose-500/30 to-rose-700/10 ring-2 ring-rose-500/50'
           : warn
             ? 'bg-gradient-to-br from-amber-400/20 to-amber-600/5 ring-1 ring-amber-400/40'
             : caution
@@ -516,81 +603,141 @@ function RunningAttempt({
               : 'bg-gradient-to-br from-emerald-400/15 to-emerald-600/5 ring-1 ring-emerald-400/30',
       )}
     >
-      <div className="flex items-center gap-2 mb-1.5">
-        {danger ? (
-          <AlertTriangle className="h-3.5 w-3.5 text-rose-300" />
-        ) : (
-          <Clock className="h-3.5 w-3.5" />
-        )}
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          {danger ? 'Time critical' : warn ? 'Hurry up' : 'Time left'}
-        </span>
-      </div>
-      <div className={cn('font-mono text-2xl tabular-nums font-semibold leading-none', timerTextClass)}>
-        {mm}:{ss}
-      </div>
-      <div className="mt-2 h-1 w-full rounded-full bg-white/10 overflow-hidden">
-        <div
-          className={cn(
-            'h-full transition-all',
-            danger
-              ? 'bg-rose-400'
-              : warn
-                ? 'bg-amber-300'
-                : caution
-                  ? 'bg-yellow-200'
-                  : 'bg-emerald-300',
-          )}
-          style={{ width: `${Math.round((1 - elapsedRatio) * 100)}%` }}
-        />
+      <div className="flex items-center gap-3">
+        {/* Circular ring */}
+        <div className="relative shrink-0">
+          <svg width="84" height="84" viewBox="0 0 84 84" className="overflow-visible">
+            <defs>
+              <linearGradient id={ringGradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={ringColor} stopOpacity="1" />
+                <stop offset="100%" stopColor={ringColor} stopOpacity="0.55" />
+              </linearGradient>
+            </defs>
+            <circle
+              cx="42"
+              cy="42"
+              r={ringR}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              className="text-white/10"
+            />
+            <circle
+              cx="42"
+              cy="42"
+              r={ringR}
+              fill="none"
+              stroke={`url(#${ringGradientId})`}
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={ringC}
+              strokeDashoffset={ringC * (1 - ringPct)}
+              transform="rotate(-90 42 42)"
+              style={{ transition: 'stroke-dashoffset 0.6s ease-out' }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            {danger ? (
+              <AlertTriangle className="h-4 w-4 text-rose-300 animate-pulse-soft" />
+            ) : (
+              <Clock className="h-4 w-4 text-white/70" />
+            )}
+          </div>
+        </div>
+
+        {/* Time + label */}
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {danger ? 'Time critical' : warn ? 'Hurry up' : 'Time left'}
+          </div>
+          <div className={cn('font-mono text-2xl tabular-nums font-semibold leading-none mt-1', timerTextClass)}>
+            {mm}:{ss}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1.5">
+            {attempt.durationMin}m total · {Math.round((1 - elapsedRatio) * 100)}% remaining
+          </div>
+        </div>
       </div>
     </div>
   )
 
   const ProgressBlock = (
-    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 px-3 py-3">
+    <div className="rounded-2xl glass px-3 py-3.5 hover:bg-white/[0.06] transition">
       <div className="flex items-center gap-2 mb-2">
-        <ListChecks className="h-3.5 w-3.5 text-[#00C8FF]" />
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Progress</span>
+        <div className="h-6 w-6 rounded-md bg-[#00C8FF]/15 ring-1 ring-[#00C8FF]/30 flex items-center justify-center">
+          <ListChecks className="h-3.5 w-3.5 text-[#00C8FF]" />
+        </div>
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Progress</span>
+        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+          {pct}%
+        </span>
       </div>
-      <div className="text-xl font-semibold tabular-nums">
-        {answered}
-        <span className="text-muted-foreground text-sm font-normal">/{total}</span>
+      <div className="flex items-baseline gap-1.5">
+        <div className="text-2xl font-semibold tabular-nums font-display">
+          {answered}
+        </div>
+        <div className="text-sm text-muted-foreground tabular-nums">/ {total}</div>
+        <div className="ml-auto text-[10px] text-muted-foreground">
+          {totalPoints} pts max
+        </div>
       </div>
-      <div className="text-[10px] text-muted-foreground mb-2">{totalPoints} pts max</div>
-      <Progress value={pct} />
+      <div className="mt-2.5 relative h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+        <motion.div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#815AFF] via-[#FF46BE] to-[#00C8FF] rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+        />
+      </div>
     </div>
   )
 
   const QuestionGrid = (
     <div>
-      <div className="flex items-center gap-2 mb-2">
-        <LayoutGrid className="h-3.5 w-3.5 text-[#FF46BE]" />
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Questions</span>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="h-6 w-6 rounded-md bg-[#FF46BE]/15 ring-1 ring-[#FF46BE]/30 flex items-center justify-center">
+          <LayoutGrid className="h-3.5 w-3.5 text-[#FF46BE]" />
+        </div>
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Questions</span>
+        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+          {answered}/{total}
+        </span>
       </div>
       <div className="grid grid-cols-5 gap-1.5">
         {attempt.questions.map((_, i) => {
           const isAnswered = isAnsweredAt(i)
           const isCurrent = i === idx
           return (
-            <button
+            <motion.button
               key={i}
               onClick={() => {
                 setIdx(i)
                 setGridOpen(false)
               }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               className={cn(
-                'aspect-square min-h-[34px] rounded-lg text-[11px] font-semibold transition-all',
+                'relative aspect-square min-h-[36px] rounded-lg text-[11px] font-semibold transition-all flex items-center justify-center',
                 isCurrent
-                  ? 'bg-[linear-gradient(135deg,#815AFF,#FF46BE,#00C8FF)] text-white shadow-[0_4px_14px_-4px_rgba(255,70,190,0.6)] scale-105'
+                  ? 'bg-[linear-gradient(135deg,#815AFF,#FF46BE,#00C8FF)] text-white shadow-[0_4px_14px_-4px_rgba(255,70,190,0.6)]'
                   : isAnswered
                     ? 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40 hover:bg-emerald-500/30'
-                    : 'bg-white/5 text-muted-foreground ring-1 ring-white/10 hover:bg-white/10',
+                    : 'bg-white/5 text-muted-foreground ring-1 ring-white/10 hover:bg-white/10 hover:text-foreground',
               )}
               aria-label={`Go to question ${i + 1}${isAnswered ? ' (answered)' : ''}`}
             >
-              {i + 1}
-            </button>
+              {isCurrent && (
+                <motion.span
+                  layoutId="q-grid-current"
+                  className="absolute inset-0 rounded-lg ring-2 ring-white/40 ring-pulse pointer-events-none"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+                />
+              )}
+              {isAnswered && !isCurrent && (
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              )}
+              <span className="relative">{i + 1}</span>
+            </motion.button>
           )
         })}
       </div>
@@ -607,13 +754,14 @@ function RunningAttempt({
       }}
       disabled={submit.isPending}
       className="w-full"
+      size="lg"
     >
       {submit.isPending ? (
         <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
         <Send className="h-4 w-4" />
       )}
-      Submit exam
+      {submit.isPending ? 'Submitting…' : 'Submit exam'}
     </GlassButton>
   )
 
@@ -633,50 +781,62 @@ function RunningAttempt({
 
       {/* ─── Lockdown banner ─── */}
       {proctoringEnabled && (
-        <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-center px-3 py-1.5 text-[10px] uppercase tracking-wider bg-rose-500/15 backdrop-blur-md border-b border-rose-400/30 text-rose-100">
-          <AlertTriangle className="h-3 w-3 mr-1.5" />
-          Lockdown active — fullscreen, no copy/paste, no tab switching.
+        <motion.div
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="absolute top-0 left-0 right-0 z-30 flex items-center justify-center px-3 py-2 text-[10px] uppercase tracking-[0.18em] bg-gradient-to-r from-rose-500/20 via-rose-500/15 to-rose-500/20 backdrop-blur-md border-b border-rose-400/40 text-rose-100"
+        >
+          <AlertTriangle className="h-3 w-3 mr-1.5 animate-pulse-soft" />
+          <span className="font-semibold">Lockdown active</span>
+          <span className="mx-2 text-rose-200/60">·</span>
+          <span className="text-rose-100/80">No copy/paste · No tab switching</span>
           {violationCount > 0 && (
-            <span className="ml-2 font-mono">
-              · {violationCount}/{MAX_VIOLATIONS} warnings
+            <span className="ml-3 font-mono px-1.5 py-0.5 rounded bg-rose-500/30 ring-1 ring-rose-300/40">
+              {violationCount}/{MAX_VIOLATIONS}
             </span>
           )}
           {!lockdown.isFullscreen && (
             <button
               type="button"
               onClick={() => void lockdown.requestFullscreen()}
-              className="ml-3 underline hover:text-white"
+              className="ml-3 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/30 ring-1 ring-rose-300/40 hover:bg-rose-500/50 transition"
             >
-              Restore fullscreen
+              <Maximize2 className="h-2.5 w-2.5" />
+              <span>Restore fullscreen</span>
             </button>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* ─── Mobile top bar ─── */}
-      <div className="md:hidden relative z-10 flex items-center gap-2 px-3 py-2.5 border-b border-white/10 backdrop-blur-md bg-black/20">
+      <div className="md:hidden relative z-10 flex items-center gap-2 px-3 py-2.5 border-b border-white/10 backdrop-blur-md bg-black/30">
         <button
           onClick={onLeave}
-          className="h-9 w-9 rounded-full glass inline-flex items-center justify-center"
+          className="h-9 w-9 rounded-full glass inline-flex items-center justify-center active:scale-95 transition"
           aria-label="Leave exam"
         >
           <LogOut className="h-4 w-4" />
         </button>
         <div
           className={cn(
-            'flex-1 px-3 py-1.5 rounded-full text-center font-mono text-sm tabular-nums',
+            'flex-1 px-3 py-1.5 rounded-full text-center font-mono text-sm tabular-nums font-semibold',
             danger
-              ? 'bg-rose-500/30 text-rose-100 ring-1 ring-rose-400/60 animate-pulse-soft'
+              ? 'bg-gradient-to-r from-rose-500/30 to-rose-600/20 text-rose-100 ring-1 ring-rose-400/60 animate-pulse-soft'
               : warn
-                ? 'bg-amber-400/20 text-amber-100 ring-1 ring-amber-300/40'
-                : 'bg-white/5 text-foreground ring-1 ring-white/10',
+                ? 'bg-gradient-to-r from-amber-400/25 to-amber-500/10 text-amber-100 ring-1 ring-amber-300/40'
+                : caution
+                  ? 'bg-gradient-to-r from-yellow-300/20 to-yellow-500/10 text-yellow-100 ring-1 ring-yellow-300/30'
+                  : 'bg-white/5 text-foreground ring-1 ring-white/10',
           )}
         >
           {mm}:{ss}
         </div>
         <button
           onClick={() => setGridOpen((v) => !v)}
-          className="h-9 px-3 rounded-full glass inline-flex items-center gap-1.5 text-xs"
+          className={cn(
+            'h-9 px-3 rounded-full glass inline-flex items-center gap-1.5 text-xs transition active:scale-95',
+            gridOpen && 'bg-white/10',
+          )}
         >
           <LayoutGrid className="h-3.5 w-3.5" /> {answered}/{total}
         </button>
@@ -702,7 +862,7 @@ function RunningAttempt({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
             className="md:hidden relative z-10 overflow-hidden border-b border-white/10 backdrop-blur-md bg-black/30"
           >
             <div className="p-3">{QuestionGrid}</div>
@@ -711,71 +871,135 @@ function RunningAttempt({
       </AnimatePresence>
 
       {/* ─── Desktop left rail ─── */}
-      <aside className="hidden md:flex relative z-10 w-72 lg:w-80 flex-col gap-3 px-4 py-5 border-r border-white/10 backdrop-blur-md bg-black/20 overflow-y-auto">
+      <aside className="hidden md:flex relative z-10 w-72 lg:w-80 flex-col gap-3 px-4 py-5 border-r border-white/10 backdrop-blur-xl bg-black/25 overflow-y-auto">
         <button
           onClick={onLeave}
-          className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition self-start"
+          className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition self-start group"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Leave exam
+          <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          Leave exam
         </button>
 
-        <div className="rounded-2xl p-4 bg-[linear-gradient(135deg,rgba(129,90,255,0.25),rgba(255,70,190,0.18),rgba(0,200,255,0.18))] ring-1 ring-white/15 shadow-[0_8px_30px_-12px_rgba(129,90,255,0.5)]">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="h-7 w-7 rounded-lg bg-white/15 flex items-center justify-center">
-              <Sparkles className="h-3.5 w-3.5 text-white" />
+        {/* Exam title card */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative rounded-2xl p-4 bg-[linear-gradient(135deg,rgba(129,90,255,0.30),rgba(255,70,190,0.22),rgba(0,200,255,0.22))] ring-1 ring-white/15 shadow-[0_8px_30px_-12px_rgba(129,90,255,0.5)] overflow-hidden"
+        >
+          <div className="pointer-events-none absolute -top-8 -right-8 h-24 w-24 rounded-full bg-white/15 blur-2xl" />
+          <div className="pointer-events-none absolute inset-0 bg-dots opacity-20" />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-7 w-7 rounded-lg bg-white/20 ring-1 ring-white/30 flex items-center justify-center">
+                <Sparkles className="h-3.5 w-3.5 text-white" />
+              </div>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-white/80 font-semibold">
+                Exam in progress
+              </span>
             </div>
-            <span className="text-[10px] uppercase tracking-wider text-white/80">Exam in progress</span>
+            <h1 className="font-display text-base font-semibold leading-tight text-white">
+              {examTitle ?? 'Exam'}
+            </h1>
           </div>
-          <h1 className="font-display text-base font-semibold leading-tight text-white">
-            {examTitle ?? 'Exam'}
-          </h1>
-        </div>
+        </motion.div>
 
         {TimerBlock}
         {ProgressBlock}
+
+        {/* Divider */}
+        <div className="hairline-gradient my-1" />
+
         {QuestionGrid}
+
         <div className="mt-auto pt-3">{SubmitButton}</div>
       </aside>
 
       {/* ─── Main content ─── */}
       <main className="relative z-10 flex-1 min-w-0 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 md:px-8 py-5 md:py-8 pb-28 md:pb-12">
+          {/* Section eyebrow */}
+          <div className="hidden md:flex items-center gap-2 mb-4">
+            <div className="section-eyebrow">
+              <Target className="h-3 w-3" />
+              Question {idx + 1} of {total}
+            </div>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {pct}% complete · {totalPoints} pts max
+            </span>
+          </div>
+
           <AnimatePresence mode="wait">
             <motion.div
               key={q.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
+              initial={{ opacity: 0, y: 14, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.99 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              <GlassCard padding="lg" strong className="overflow-hidden">
-                {/* Colorful top accent strip */}
-                <div className="-mx-6 -mt-6 mb-5 h-1.5 bg-[linear-gradient(90deg,#815AFF,#FF46BE,#00C8FF)]" />
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <Badge variant="primary">
-                    Q{idx + 1} <span className="opacity-60 mx-0.5">/</span> {total}
+              <GlassCard padding="lg" strong className="relative overflow-hidden">
+                {/* Animated gradient top accent strip */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-[linear-gradient(90deg,#815AFF,#FF46BE,#00C8FF,#815AFF)] bg-[length:200%_100%] animate-[gradient_8s_ease_infinite]" />
+
+                {/* Card meta row */}
+                <div className="flex items-center gap-2 mb-4 flex-wrap pt-1">
+                  <Badge variant="primary" className="font-mono">
+                    Q{idx + 1}
+                    <span className="opacity-50 mx-0.5">/</span>
+                    {total}
                   </Badge>
-                  <Badge variant={q.type.startsWith('mcq_multi') ? 'info' : 'default'}>
+                  <Badge variant={q.type === 'mcq_multi' ? 'info' : 'muted'}>
                     {labelForType(q.type)}
                   </Badge>
-                  <Badge variant="muted">{q.points} pts</Badge>
+                  <Badge variant="muted">
+                    <Target className="h-2.5 w-2.5 mr-0.5" />
+                    {q.points} pts
+                  </Badge>
                   {q.acceptsAttachment && (
                     <Badge variant="warning">
-                      <Paperclip className="h-2.5 w-2.5" /> attachment allowed
+                      <Paperclip className="h-2.5 w-2.5" />
+                      attachment
                     </Badge>
                   )}
+                  {isAnsweredAt(idx) && (
+                    <motion.span
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-300"
+                    >
+                      <CheckCircle2 className="h-3 w-3" />
+                      Answered
+                    </motion.span>
+                  )}
                 </div>
-                <div className="font-display text-lg md:text-xl leading-relaxed prose-chat">
+
+                {/* Question body */}
+                <div className="font-display text-lg md:text-xl leading-relaxed prose-chat prose prose-invert max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {q.body}
                   </ReactMarkdown>
                 </div>
+
                 {q.hasImage && (
-                  <div className="mt-4">
+                  <div className="mt-4 rounded-xl overflow-hidden ring-1 ring-white/10">
                     <QuestionImage questionId={q.id} />
                   </div>
                 )}
-                <div className="mt-6 space-y-2">
+
+                {/* Divider */}
+                <div className="my-6 hairline-gradient" />
+
+                {/* Answer area */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Your answer
+                    </span>
+                    <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                    <span className="text-[10px] text-muted-foreground">
+                      Choose one or more options
+                    </span>
+                  </div>
                   <QuestionInput
                     question={q}
                     selected={answers[q.id]?.selected ?? []}
@@ -784,6 +1008,7 @@ function RunningAttempt({
                     onText={(t) => setText(q.id, t)}
                   />
                 </div>
+
                 {q.acceptsAttachment && (
                   <AttachmentDock attemptId={attempt.id} questionId={q.id} />
                 )}
@@ -792,17 +1017,27 @@ function RunningAttempt({
           </AnimatePresence>
 
           {/* Prev / Next nav — keeps current question count visible */}
-          <div className="mt-5 flex items-center justify-between gap-2">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mt-5 flex items-center justify-between gap-2"
+          >
             <GlassButton
               variant="glass"
               onClick={() => setIdx((i) => Math.max(0, i - 1))}
               disabled={idx === 0}
+              className="group"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Previous
+              <ChevronLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
+              Previous
             </GlassButton>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {idx + 1} of {total}
-            </span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#FF46BE]" />
+              <span className="text-xs text-muted-foreground tabular-nums font-medium">
+                {idx + 1} of {total}
+              </span>
+            </div>
             {idx === total - 1 ? (
               <GlassButton
                 onClick={() => {
@@ -812,20 +1047,25 @@ function RunningAttempt({
                   finish('manual')
                 }}
                 disabled={submit.isPending}
+                className="group"
               >
                 {submit.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                 )}
                 Submit
               </GlassButton>
             ) : (
-              <GlassButton onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}>
-                Next <ArrowRight className="h-3.5 w-3.5" />
+              <GlassButton
+                onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
+                className="group"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
               </GlassButton>
             )}
-          </div>
+          </motion.div>
         </div>
       </main>
     </div>
@@ -973,37 +1213,43 @@ function AttachmentDock({
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          Attach paper / photo (optional)
+    <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04] transition p-3.5">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="h-6 w-6 rounded-md bg-[#FF46BE]/15 ring-1 ring-[#FF46BE]/30 flex items-center justify-center">
+          <Paperclip className="h-3.5 w-3.5 text-[#FF46BE]" />
+        </div>
+        <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+          Attach paper / photo
         </span>
         <span className="ml-auto text-[10px] text-muted-foreground">
-          PNG, JPG, WEBP, PDF · ≤ 10 MB
+          PNG · JPG · WEBP · PDF · ≤ 10 MB
         </span>
       </div>
       {forQuestion.length > 0 && (
-        <ul className="space-y-1.5 mb-2">
+        <ul className="space-y-1.5 mb-3">
           {forQuestion.map((a) => (
-            <li
+            <motion.li
               key={a.id}
-              className="flex items-center gap-2 text-xs glass rounded-lg px-2.5 py-1.5"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-2 text-xs glass rounded-lg px-2.5 py-2"
             >
-              <FileImage className="h-3.5 w-3.5 text-[#00C8FF] shrink-0" />
-              <span className="truncate flex-1">{a.filename}</span>
-              <span className="text-[10px] text-muted-foreground">
+              <div className="h-6 w-6 rounded-md bg-[#00C8FF]/15 ring-1 ring-[#00C8FF]/30 flex items-center justify-center shrink-0">
+                <FileImage className="h-3.5 w-3.5 text-[#00C8FF]" />
+              </div>
+              <span className="truncate flex-1 font-medium">{a.filename}</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">
                 {(a.size / 1024).toFixed(0)} KB
               </span>
               <button
                 type="button"
                 onClick={() => onRemove(a)}
-                className="text-rose-300/80 hover:text-rose-200 inline-flex items-center"
+                className="h-6 w-6 rounded-md text-rose-300/80 hover:text-rose-100 hover:bg-rose-500/20 inline-flex items-center justify-center transition"
                 aria-label="Remove attachment"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
               </button>
-            </li>
+            </motion.li>
           ))}
         </ul>
       )}
@@ -1023,7 +1269,7 @@ function AttachmentDock({
         disabled={upload.isPending}
       >
         {upload.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-        Upload file
+        {upload.isPending ? 'Uploading…' : 'Upload file'}
       </GlassButton>
     </div>
   )
@@ -1041,28 +1287,56 @@ function OptionRow({
   onClick: () => void
 }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
+      whileHover={{ x: 2 }}
+      whileTap={{ scale: 0.98 }}
       className={cn(
-        'group w-full text-left p-3 rounded-xl transition-all flex items-start gap-3 border',
+        'group relative w-full text-left p-3.5 rounded-xl transition-all flex items-start gap-3 border overflow-hidden',
         selected
-          ? 'border-transparent bg-[linear-gradient(120deg,rgba(129,90,255,0.18),rgba(255,70,190,0.18))] ring-2 ring-[#815AFF]/50'
-          : 'border-white/10 bg-white/5 hover:bg-white/10',
+          ? 'border-transparent bg-[linear-gradient(120deg,rgba(129,90,255,0.20),rgba(255,70,190,0.18),rgba(0,200,255,0.10))] ring-2 ring-[#815AFF]/50 shadow-[0_8px_24px_-12px_rgba(129,90,255,0.6)]'
+          : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/15',
       )}
     >
+      {selected && (
+        <motion.span
+          layoutId={`opt-glow-${label}`}
+          className="absolute inset-0 pointer-events-none"
+          transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+        >
+          <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[#815AFF] via-[#FF46BE] to-[#00C8FF]" />
+        </motion.span>
+      )}
       <span
         className={cn(
-          'h-5 w-5 rounded-md flex items-center justify-center border text-[10px] font-bold shrink-0 mt-0.5',
+          'relative h-7 w-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 transition-all',
           selected
-            ? 'border-transparent bg-[linear-gradient(135deg,#815AFF,#FF46BE)] text-white'
-            : 'border-white/20 text-muted-foreground',
+            ? 'bg-[linear-gradient(135deg,#815AFF,#FF46BE,#00C8FF)] text-white shadow-md'
+            : 'border border-white/20 text-muted-foreground group-hover:border-white/30 group-hover:text-foreground',
         )}
       >
         {label}
       </span>
-      <span className="text-sm leading-relaxed">{text}</span>
-    </button>
+      <span
+        className={cn(
+          'relative text-sm leading-relaxed flex-1',
+          selected && 'font-medium',
+        )}
+      >
+        {text}
+      </span>
+      {selected && (
+        <motion.span
+          initial={{ scale: 0, rotate: -90 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', bounce: 0.4, duration: 0.4 }}
+          className="relative shrink-0 mt-1"
+        >
+          <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+        </motion.span>
+      )}
+    </motion.button>
   )
 }
 
@@ -1102,25 +1376,64 @@ function StudentResultView({
     return <Skeleton className="h-64 rounded-3xl" />
   }
   const pct = attempt.maxScore ? Math.round((attempt.score / attempt.maxScore) * 100) : 0
+  const grade =
+    pct >= 90 ? { label: 'Outstanding', color: 'emerald', icon: Trophy }
+    : pct >= 75 ? { label: 'Strong', color: 'cyan', icon: Sparkles }
+    : pct >= 60 ? { label: 'Passing', color: 'amber', icon: CheckCircle2 }
+    : { label: 'Needs review', color: 'rose', icon: AlertTriangle }
+
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <Link
         to={`/app/courses/${courseId}/quizzes`}
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition group"
       >
-        <ArrowLeft className="h-3 w-3" /> Back to quizzes
+        <ArrowLeft className="h-3 w-3 group-hover:-translate-x-0.5 transition-transform" />
+        Back to quizzes
       </Link>
 
-      <GlassCard strong padding="lg">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="h-16 w-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold bg-[linear-gradient(135deg,#815AFF,#FF46BE,#00C8FF)]">
+      <div className="flex items-center gap-2">
+        <div className="section-eyebrow">
+          <Trophy className="h-3 w-3" /> Results
+        </div>
+        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+        <span className="text-[11px] text-muted-foreground">
+          Submitted · {attempt.released ? 'Released' : 'Pending review'}
+        </span>
+      </div>
+
+      <GlassCard strong padding="lg" className="relative overflow-hidden">
+        {/* Celebratory orbs */}
+        <div className="pointer-events-none absolute -top-20 -right-12 h-56 w-56 rounded-full bg-[#815AFF]/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 -left-12 h-56 w-56 rounded-full bg-[#00C8FF]/25 blur-3xl" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-32 w-32 rounded-full bg-[#FF46BE]/15 blur-3xl" />
+
+        <div className="relative flex items-center gap-4 flex-wrap">
+          {/* Score badge */}
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', bounce: 0.4, duration: 0.6 }}
+            className="relative h-20 w-20 rounded-2xl flex items-center justify-center text-white text-2xl font-bold bg-[linear-gradient(135deg,#815AFF,#FF46BE,#00C8FF)] shadow-[0_10px_30px_-10px_rgba(255,70,190,0.6)] shrink-0"
+          >
             {pct}%
-          </div>
+            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/30" />
+          </motion.div>
+
           <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <Badge variant={`${grade.color === 'emerald' ? 'success' : grade.color === 'rose' ? 'danger' : 'info'}` as 'success' | 'danger' | 'info'}>
+                <grade.icon className="h-3 w-3" />
+                {grade.label}
+              </Badge>
+              {!attempt.released && attempt.needsManualGrading && (
+                <Badge variant="warning">Manual review pending</Badge>
+              )}
+            </div>
             <h2 className="font-display text-xl font-semibold">
               {quizTitle ?? quiz?.title ?? 'Quiz result'}
             </h2>
-            <div className="text-xs text-muted-foreground mt-0.5">
+            <div className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
               {attempt.released
                 ? `Final: ${attempt.score} / ${attempt.maxScore} (auto + manual marks merged)`
                 : attempt.needsManualGrading
@@ -1129,31 +1442,33 @@ function StudentResultView({
             </div>
           </div>
         </div>
+
         {(attempt.autoMax || attempt.manualMax) ? (
-          <div className="mt-4 grid sm:grid-cols-3 gap-2 text-[11px]">
-            <div className="glass rounded-xl px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Auto-marked</div>
-              <div className="font-mono">{attempt.autoScore ?? 0} / {attempt.autoMax ?? 0}</div>
+          <div className="relative mt-5 grid sm:grid-cols-3 gap-2 text-[11px]">
+            <div className="glass rounded-xl px-3 py-2.5">
+              <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Auto-marked</div>
+              <div className="font-mono text-base font-semibold tabular-nums">{attempt.autoScore ?? 0} / {attempt.autoMax ?? 0}</div>
             </div>
-            <div className="glass rounded-xl px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Teacher-marked</div>
-              <div className="font-mono">
+            <div className="glass rounded-xl px-3 py-2.5">
+              <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Teacher-marked</div>
+              <div className="font-mono text-base font-semibold tabular-nums">
                 {attempt.manualScore ?? 0} / {attempt.manualMax ?? 0}
                 {!attempt.released && (attempt.pendingManual ?? 0) > 0 && (
-                  <span className="text-amber-300 ml-1.5">· {attempt.pendingManual} pending</span>
+                  <span className="text-amber-300 ml-1.5 text-[10px]">· {attempt.pendingManual} pending</span>
                 )}
               </div>
             </div>
-            <div className="glass rounded-xl px-3 py-2">
-              <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Merged total</div>
-              <div className="font-mono font-semibold">{attempt.score} / {attempt.maxScore}</div>
+            <div className="rounded-xl px-3 py-2.5 bg-[linear-gradient(135deg,rgba(129,90,255,0.18),rgba(255,70,190,0.12))] ring-1 ring-white/15">
+              <div className="text-[9px] uppercase tracking-[0.18em] text-white/70 mb-1">Merged total</div>
+              <div className="font-mono text-base font-semibold tabular-nums">{attempt.score} / {attempt.maxScore}</div>
             </div>
           </div>
         ) : null}
+
         {attempt.released && attempt.teacherFeedback && (
-          <div className="mt-3 glass rounded-xl px-3 py-2 text-xs border-l-2 border-[#FF46BE]">
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">Teacher feedback</div>
-            <p>{attempt.teacherFeedback}</p>
+          <div className="relative mt-4 glass rounded-xl px-3.5 py-3 text-xs border-l-2 border-[#FF46BE]">
+            <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Teacher feedback</div>
+            <p className="leading-relaxed">{attempt.teacherFeedback}</p>
           </div>
         )}
       </GlassCard>
@@ -1214,9 +1529,19 @@ function ResultQuestionCard({
   }
 
   return (
-    <GlassCard padding="md">
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <Badge variant="default">Q{index + 1}</Badge>
+    <GlassCard padding="md" className={cn(
+      'relative overflow-hidden',
+      correct && 'ring-1 ring-emerald-400/20',
+      wasWrong && 'ring-1 ring-rose-400/20',
+    )}>
+      {correct && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+      )}
+      {wasWrong && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-rose-400 to-transparent" />
+      )}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Badge variant="default" className="font-mono">Q{index + 1}</Badge>
         {graded?.auto === false ? (
           <Badge variant="warning">manual review</Badge>
         ) : correct ? (
@@ -1228,22 +1553,24 @@ function ResultQuestionCard({
             <XCircle className="h-2.5 w-2.5" /> incorrect
           </Badge>
         )}
-        <span className="text-[10px] text-muted-foreground ml-auto">
-          {graded?.points ?? 0}/{graded?.maxPoints ?? question.points} pts
+        <span className="ml-auto text-[11px] text-muted-foreground tabular-nums font-medium">
+          {graded?.points ?? 0}
+          <span className="opacity-50">/</span>
+          {graded?.maxPoints ?? question.points} pts
         </span>
       </div>
-      <div className="text-sm prose-chat">
+      <div className="text-sm prose prose-invert prose-chat max-w-none leading-relaxed">
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
           {question.body}
         </ReactMarkdown>
       </div>
       {question.hasImage && (
-        <div className="mt-2">
+        <div className="mt-3 rounded-xl overflow-hidden ring-1 ring-white/10">
           <QuestionImage questionId={question.id} className="max-w-md" />
         </div>
       )}
       {graded?.explanation && (
-        <div className="mt-2 text-[11px] text-muted-foreground border-l-2 border-[#00C8FF] pl-3">
+        <div className="mt-3 text-[11px] text-muted-foreground border-l-2 border-[#00C8FF] pl-3 py-1 leading-relaxed">
           {graded.explanation}
         </div>
       )}
@@ -1253,22 +1580,29 @@ function ResultQuestionCard({
             <button
               type="button"
               onClick={askWhy}
-              className="inline-flex items-center gap-1.5 rounded-full glass px-3 h-7 text-[11px] hover:bg-white/10 transition"
+              className="group inline-flex items-center gap-1.5 rounded-full glass px-3.5 h-8 text-[11px] hover:bg-white/10 transition"
             >
-              <Sparkles className="h-3 w-3 text-[#FF46BE]" /> Why is this wrong?
+              <Sparkles className="h-3 w-3 text-[#FF46BE] group-hover:rotate-12 transition-transform" />
+              Why is this wrong?
             </button>
           ) : (
-            <div className="rounded-xl border border-white/10 bg-[linear-gradient(120deg,rgba(129,90,255,0.07),rgba(0,200,255,0.05))] p-3">
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-white/10 bg-[linear-gradient(120deg,rgba(129,90,255,0.08),rgba(255,70,190,0.05),rgba(0,200,255,0.05))] p-3.5"
+            >
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-3.5 w-3.5 text-[#FF46BE]" />
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div className="h-6 w-6 rounded-md bg-[#FF46BE]/15 ring-1 ring-[#FF46BE]/30 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-[#FF46BE]" />
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   AI explanation
                 </span>
                 {explainLoading && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
                 <button
                   type="button"
                   onClick={() => setExplainOpen(false)}
-                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded-md hover:bg-white/10 transition"
                 >
                   Close
                 </button>
@@ -1276,13 +1610,13 @@ function ResultQuestionCard({
               {explainError ? (
                 <p className="text-[12px] text-rose-300">{explainError}</p>
               ) : (
-                <div className="text-[12px] prose-chat leading-relaxed">
+                <div className="text-[12px] prose prose-invert prose-chat leading-relaxed max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {explanation || '_Asking the course AI…_'}
                   </ReactMarkdown>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
         </div>
       )}
@@ -1299,20 +1633,40 @@ function TeacherView({ quiz, courseId }: { quiz: import('@/types').Quiz; courseI
     <div className="max-w-3xl mx-auto space-y-4">
       <Link
         to={`/app/courses/${courseId}/quizzes`}
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition group"
       >
-        <ArrowLeft className="h-3 w-3" /> Back to quizzes
+        <ArrowLeft className="h-3 w-3 group-hover:-translate-x-0.5 transition-transform" />
+        Back to quizzes
       </Link>
-      <GlassCard strong padding="lg">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <Badge variant="primary" className="mb-2">
-              <Sparkles className="h-3 w-3" /> Teacher view
+
+      <div className="flex items-center gap-2">
+        <div className="section-eyebrow">
+          <Sparkles className="h-3 w-3" /> Teacher view
+        </div>
+        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+        <span className="text-[11px] text-muted-foreground">
+          {quiz.questions?.length ?? 0} questions · {quiz.totalPoints} pts
+        </span>
+      </div>
+
+      <GlassCard strong padding="lg" className="relative overflow-hidden">
+        <div className="pointer-events-none absolute -top-16 -right-12 h-44 w-44 rounded-full bg-[#815AFF]/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -left-12 h-44 w-44 rounded-full bg-[#00C8FF]/20 blur-3xl" />
+        <div className="relative flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <Badge variant="primary" className="mb-3">
+              <Sparkles className="h-3 w-3" /> Teacher preview
             </Badge>
-            <h2 className="font-display text-xl font-semibold">{quiz.title}</h2>
-            <p className="text-xs text-muted-foreground mt-1">{quiz.description}</p>
+            <h2 className="font-display text-xl font-semibold leading-tight">
+              {quiz.title}
+            </h2>
+            {quiz.description && (
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                {quiz.description}
+              </p>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <GlassButton variant="glass" size="sm">
               <Edit3 className="h-3.5 w-3.5" /> Edit
             </GlassButton>
@@ -1325,44 +1679,61 @@ function TeacherView({ quiz, courseId }: { quiz: import('@/types').Quiz; courseI
 
       <div className="space-y-3">
         {(quiz.questions ?? []).map((q, i) => (
-          <GlassCard key={q.id} padding="md">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge variant="default">Q{i + 1}</Badge>
+          <GlassCard key={q.id} padding="md" className="hover:bg-white/[0.05] transition">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <Badge variant="default" className="font-mono">Q{i + 1}</Badge>
               <Badge variant="info">{labelForType(q.type)}</Badge>
-              <span className="text-[10px] text-muted-foreground ml-auto">{q.points} pts</span>
+              <Badge variant="muted">
+                <Target className="h-2.5 w-2.5 mr-0.5" />
+                {q.points} pts
+              </Badge>
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                Question {i + 1} of {quiz.questions?.length ?? 0}
+              </span>
             </div>
-            <div className="prose-chat text-sm">
+            <div className="prose prose-invert prose-chat text-sm leading-relaxed max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                 {q.body}
               </ReactMarkdown>
             </div>
             {q.hasImage && (
-              <div className="mt-2">
+              <div className="mt-3 rounded-xl overflow-hidden ring-1 ring-white/10">
                 <QuestionImage questionId={q.id} className="max-w-md" />
               </div>
             )}
             {q.options && q.options.length > 0 && (
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-3 space-y-1.5">
                 {q.options.map((opt, oi) => {
                   const isCorrect = (q.correct as number[] | undefined)?.includes?.(oi)
                   return (
                     <li
                       key={oi}
                       className={cn(
-                        'text-xs rounded-lg px-2 py-1',
-                        isCorrect ? 'bg-emerald-500/10 text-emerald-200' : 'bg-white/5',
+                        'flex items-start gap-2 text-xs rounded-lg px-2.5 py-1.5',
+                        isCorrect
+                          ? 'bg-emerald-500/10 text-emerald-100 ring-1 ring-emerald-400/30'
+                          : 'bg-white/[0.04] text-muted-foreground',
                       )}
                     >
-                      <span className="font-mono mr-2">{String.fromCharCode(65 + oi)}</span>
-                      {opt}
-                      {isCorrect && <span className="ml-2 text-emerald-400">✓</span>}
+                      <span className={cn(
+                        'h-5 w-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5',
+                        isCorrect
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-white/10',
+                      )}>
+                        {String.fromCharCode(65 + oi)}
+                      </span>
+                      <span className="flex-1">{opt}</span>
+                      {isCorrect && (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5" />
+                      )}
                     </li>
                   )
                 })}
               </ul>
             )}
             {q.explanation && (
-              <div className="mt-2 text-[11px] text-muted-foreground border-l-2 border-[#00C8FF] pl-3">
+              <div className="mt-3 text-[11px] text-muted-foreground border-l-2 border-[#00C8FF] pl-3 py-1 leading-relaxed">
                 {q.explanation}
               </div>
             )}

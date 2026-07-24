@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,7 @@ from ..schemas.assignment import (
     SubmissionOut,
 )
 from ..services.notifications import notify, notify_course
+from ..services.storage import get_storage
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -224,8 +226,7 @@ async def submit_assignment(
     if a.status == "closed":
         raise HTTPException(status_code=409, detail="Assignment is closed")
 
-    sub_dir = settings.uploads_dir / a.course_id / "submissions" / a.id / current.id
-    sub_dir.mkdir(parents=True, exist_ok=True)
+    sub_dir = f"{a.course_id}/submissions/{a.id}/{current.id}"
 
     saved: list[dict] = []
     for f in files or []:
@@ -233,17 +234,31 @@ async def submit_assignment(
             continue
         sub_id = str(uuid.uuid4())
         safe_name = Path(f.filename).name
-        path = sub_dir / f"{sub_id}__{safe_name}"
-        size = 0
-        with path.open("wb") as out:
+        mime = f.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+
+        async def _iter(file=f):
             while True:
-                chunk = await f.read(1024 * 1024)
+                chunk = await file.read(1024 * 1024)
                 if not chunk:
                     break
-                size += len(chunk)
-                out.write(chunk)
-        await f.close()
-        saved.append({"filename": safe_name, "path": str(path), "size": size})
+                yield chunk
+            await file.close()
+
+        try:
+            stored = await get_storage().save(
+                stream=_iter(),
+                filename=safe_name,
+                mime=mime,
+                folder=sub_dir,
+                key_hint=sub_id,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=413, detail=str(e)) from None
+        except Exception as e:
+            log.exception("Submission upload failed")
+            raise HTTPException(status_code=502, detail=f"Upload storage failed: {e}") from None
+
+        saved.append({"filename": stored.filename, "path": stored.url, "size": stored.size})
 
     s = Submission(
         assignment_id=assignment_id,

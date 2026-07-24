@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from ..config import settings
+
 log = logging.getLogger(__name__)
 
 
@@ -16,7 +18,22 @@ SUPPORTED_EXTS = {
     ".markdown": "text/markdown",
 }
 
-MAX_UPLOAD_BYTES = 40 * 1024 * 1024  # 40 MB
+# Sourced from config so a single env var (MAX_UPLOAD_MB) tunes the whole app.
+MAX_UPLOAD_BYTES = settings.max_upload_mb * 1024 * 1024
+
+# Magic-byte signatures we hard-reject regardless of extension (a .pdf that is
+# really an .exe must not slip through). Archives/executables/compressed blobs.
+_FORBIDDEN_SIGNATURES: tuple[bytes, ...] = (
+    b"MZ",              # DOS/PE executable (.exe/.dll)
+    b"\x7fELF",         # ELF executable
+    b"\xca\xfe\xba\xbe",  # Mach-O / Java class
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64
+    b"Rar!",            # RAR archive
+    b"7z\xbc\xaf\x27\x1c",  # 7-Zip
+    b"\x1f\x8b",        # gzip
+    b"\xfd7zXZ",        # xz
+    b"BZh",             # bzip2
+)
 
 
 class UnsupportedFileError(ValueError):
@@ -30,6 +47,50 @@ def detect_mime(filename: str) -> str:
 
 def is_supported(filename: str) -> bool:
     return Path(filename).suffix.lower() in SUPPORTED_EXTS
+
+
+def _looks_like_text(header: bytes) -> bool:
+    """A NUL byte or a high ratio of undecodable bytes means it's binary."""
+    if b"\x00" in header:
+        return False
+    try:
+        header.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        # Allow a small tail of a multi-byte char cut off at the header boundary.
+        try:
+            header[:-4].decode("utf-8")
+            return True
+        except UnicodeDecodeError:
+            return False
+
+
+def validate_magic(filename: str, header: bytes) -> str:
+    """Verify a file's real type by its leading bytes, not just its extension.
+
+    Returns the resolved MIME on success; raises :class:`UnsupportedFileError`
+    when the extension is unsupported or the content signature contradicts it.
+    """
+    ext = Path(filename).suffix.lower()
+    if ext not in SUPPORTED_EXTS:
+        raise UnsupportedFileError("Unsupported file type — PDF, DOCX, PPTX, TXT, MD only")
+
+    for sig in _FORBIDDEN_SIGNATURES:
+        if header.startswith(sig):
+            raise UnsupportedFileError("Executables and archives are not allowed")
+
+    if ext == ".pdf":
+        if not header.startswith(b"%PDF-"):
+            raise UnsupportedFileError("File is not a valid PDF (bad signature)")
+    elif ext in {".docx", ".pptx"}:
+        # OOXML files are ZIP containers.
+        if not header.startswith(b"PK\x03\x04"):
+            raise UnsupportedFileError(f"File is not a valid {ext[1:].upper()} (bad signature)")
+    elif ext in {".txt", ".md", ".markdown"}:
+        if not _looks_like_text(header):
+            raise UnsupportedFileError("Text file appears to contain binary data")
+
+    return SUPPORTED_EXTS[ext]
 
 
 def extract_pages(path: Path) -> list[tuple[int, str]]:

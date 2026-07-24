@@ -1,10 +1,16 @@
 from .auth import (
+    ForgotPasswordRequest,
+    GoogleDevSignInRequest,
     LoginRequest,
+    MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenPair,
     UserOut,
     UserUpdate,
+    VerifyEmailRequest,
 )
 from .course import (
     CourseCreate,
@@ -22,12 +28,18 @@ from .chat import (
 )
 
 __all__ = [
+    "ForgotPasswordRequest",
+    "GoogleDevSignInRequest",
     "LoginRequest",
+    "MessageResponse",
     "RefreshRequest",
     "RegisterRequest",
+    "ResendVerificationRequest",
+    "ResetPasswordRequest",
     "TokenPair",
     "UserOut",
     "UserUpdate",
+    "VerifyEmailRequest",
     "CourseCreate",
     "CourseJoin",
     "CourseOut",

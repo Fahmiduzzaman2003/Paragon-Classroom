@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────
+# Secrets & env — NEVER commit these. Only *.example is tracked.
+# ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.jwtsecret*
+.jwtsecret.tmp
+
+# ─────────────────────────────────────────────────────
+# Python / backend
+# ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.db
+*.sqlite
+*.sqlite3
+paragon.db
+
+# On-disk data that must never be a source artifact (ephemeral in prod)
+uploads/
+chroma_data/
+backend/uploads/
+backend/chroma_data/
+
+# Local run/probe scratch scripts (but never dunder module files)
+_*.py
+_*.ps1
+!**/__init__.py
+!**/__main__.py
+probe.ps1
+run.ps1
+run.sh
+run_utf8.ps1
+start-all.ps1
+uvicorn.*.log
+*.out.log
+*.err.log
+
+# ─────────────────────────────────────────────────────
+# Node / frontend
+# ─────────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+tsc-out.txt
+
+# ─────────────────────────────────────────────────────
+# Editors / OS / tooling
+# ─────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+.puku/
+*.suo
+*.swp
+*.tmp
+~$*
+~WRL*.tmp

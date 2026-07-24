@@ -4,9 +4,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { Landing } from '@/pages/Landing'
 import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
+import { GoogleCallback } from '@/pages/GoogleCallback'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
-import { DesignSystem } from '@/pages/DesignSystem'
 import { Settings } from '@/pages/Settings'
 import { Inbox } from '@/pages/Inbox'
 import { GlobalCalendar } from '@/pages/GlobalCalendar'
@@ -34,6 +34,17 @@ function RequireAuth() {
   return <Outlet />
 }
 
+/** Gates student-only routes — teachers hitting `/app/exam/join` directly via
+ * URL are bounced back to the dashboard. Admins still pass through so they
+ * can QA the student flow. */
+function RequireStudent() {
+  const user = useAuthStore((s) => s.user)
+  if (user && user.role !== 'student' && user.role !== 'admin') {
+    return <Navigate to="/app" replace />
+  }
+  return <Outlet />
+}
+
 function RedirectIfAuthed() {
   const user = useAuthStore((s) => s.user)
   if (user) return <Navigate to="/app" replace />
@@ -47,6 +58,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
+      { path: '/auth/google/callback', element: <GoogleCallback /> },
     ],
   },
   {
@@ -59,11 +71,17 @@ export const router = createBrowserRouter([
           { index: true, element: <Dashboard /> },
           { path: 'profile', element: <Profile /> },
           { path: 'settings', element: <Settings /> },
-          { path: 'design-system', element: <DesignSystem /> },
           { path: 'inbox', element: <Inbox /> },
           { path: 'calendar', element: <GlobalCalendar /> },
           { path: 'leaderboard', element: <GlobalLeaderboard /> },
-          { path: 'exam/join', element: <JoinExam /> },
+          {
+            // Student-only — sidebar hides the link, but the URL is still
+            // guarded. Admins pass through so they can QA the flow.
+            element: <RequireStudent />,
+            children: [
+              { path: 'exam/join', element: <JoinExam /> },
+            ],
+          },
           {
             path: 'courses/:courseId',
             element: <CourseLayout />,

@@ -9,6 +9,8 @@ from .forum import ForumReply, ForumThread
 from .event import Announcement, CalendarEvent
 from .notification import Notification
 from .flashcard import Flashcard
+from .email_token import EmailToken, EmailTokenPurpose
+from .job import IngestionJob, JobStage, JobStatus
 
 __all__ = [
     "User",
@@ -29,4 +31,9 @@ __all__ = [
     "CalendarEvent",
     "Notification",
     "Flashcard",
+    "EmailToken",
+    "EmailTokenPurpose",
+    "IngestionJob",
+    "JobStage",
+    "JobStatus",
 ]

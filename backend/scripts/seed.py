@@ -166,15 +166,22 @@ async def upsert_user(
     role: str,
     password: str,
     institution: str,
+    email_verified: bool = True,
 ) -> User:
     """Create the user if missing, otherwise reset their password / role to the
-    seed values. This makes the demo accounts reliably loginable across re-runs."""
+    seed values. This makes the demo accounts reliably loginable across re-runs.
+
+    Seed accounts default to ``email_verified=True`` so the demo flow works
+    out of the box without SMTP setup. Pass ``email_verified=False`` if you
+    specifically want to exercise the verification path.
+    """
     existing = await db.scalar(select(User).where(User.email == email.lower()))
     if existing:
         existing.password_hash = hash_password(password)
         existing.name = name
         existing.role = role
         existing.institution = institution
+        existing.email_verified = existing.email_verified or email_verified
         await db.flush()
         return existing
     u = User(
@@ -183,6 +190,7 @@ async def upsert_user(
         name=name,
         role=role,
         institution=institution,
+        email_verified=email_verified,
     )
     db.add(u)
     await db.flush()

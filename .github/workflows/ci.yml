@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (lint + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install ruff
+      - name: Lint (ruff)
+        run: ruff check app || true   # advisory; do not fail the build on style
+      - name: Run tests
+        env:
+          APP_ENV: development
+          JWT_SECRET: ci-secret-do-not-use-in-prod-aaaaaaaaaaaaaaaaaaaa
+          LLM_PROVIDER: mock
+          EMBEDDING_PROVIDER: local
+          VECTOR_BACKEND: chroma
+        run: pytest -q tests/unit tests/integration
+
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc -b
+      - name: Lint
+        run: npm run lint || true   # advisory
+      - name: Build
+        env:
+          VITE_API_URL: https://example.onrender.com
+        run: npm run build

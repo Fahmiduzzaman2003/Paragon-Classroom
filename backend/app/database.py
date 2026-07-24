@@ -20,6 +20,16 @@ engine_kwargs: dict = {"echo": False, "future": True}
 if settings.is_sqlite:
     # aiosqlite: single connection by default is fine for local dev.
     engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Free Postgres (Neon) allows few connections and drops idle ones. Keep the
+    # pool small, pre-ping to avoid handing out dead connections after the DB
+    # auto-suspends, and recycle before the server times them out.
+    engine_kwargs.update(
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle_s,
+    )
 
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -83,3 +93,22 @@ def _apply_dev_migrations(sync_conn) -> None:
             add("attempts", "teacher_feedback TEXT DEFAULT '' NOT NULL")
         if "violations" not in c:
             add("attempts", "violations JSON DEFAULT '[]' NOT NULL")
+        if "idempotency_key" not in c:
+            add("attempts", "idempotency_key VARCHAR(64)")
+        if "late" not in c:
+            add("attempts", "late BOOLEAN DEFAULT 0 NOT NULL")
+        if "grading_model" not in c:
+            add("attempts", "grading_model VARCHAR(80) DEFAULT '' NOT NULL")
+        if "rubric_version" not in c:
+            add("attempts", "rubric_version VARCHAR(20) DEFAULT '' NOT NULL")
+
+    if "users" in {r[0] for r in sync_conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).all()}:
+        c = cols("users")
+        if "email_verified" not in c:
+            add("users", "email_verified BOOLEAN DEFAULT 0 NOT NULL")
+        if "password_reset_token_hash" not in c:
+            add("users", "password_reset_token_hash VARCHAR(128)")
+        if "password_reset_expires_at" not in c:
+            add("users", "password_reset_expires_at DATETIME")
+        if "google_sub" not in c:
+            add("users", "google_sub VARCHAR(255)")

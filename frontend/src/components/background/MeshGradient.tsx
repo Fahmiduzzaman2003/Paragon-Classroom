@@ -3,6 +3,9 @@ import { motion } from 'framer-motion'
 /**
  * Animated mesh-gradient backdrop: drifting blurred orbs on a deep indigo base.
  * Sits fixed behind all UI. Respects prefers-reduced-motion via globals.css.
+ *
+ * Light mode uses a soft lavender/pearl wash with violet orbs;
+ * dark mode keeps the indigo/magenta glow.
  */
 export function MeshGradient() {
   return (
@@ -10,14 +13,47 @@ export function MeshGradient() {
       aria-hidden
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
     >
-      {/* Base gradient (different for dark vs light) */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(32,20,80,1)_0%,_rgba(8,6,22,1)_55%,_rgba(2,2,10,1)_100%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(32,20,80,1)_0%,_rgba(8,6,22,1)_55%,_rgba(2,2,10,1)_100%)]" />
-      <div className="absolute inset-0 hidden dark:block opacity-100" />
-      <div className="absolute inset-0 block dark:hidden bg-[radial-gradient(ellipse_at_top,_rgba(240,235,255,1)_0%,_rgba(230,225,250,1)_55%,_rgba(220,215,245,1)_100%)]" />
+      {/* Base gradient — light */}
+      <div className="absolute inset-0 block dark:hidden bg-[radial-gradient(ellipse_at_top,_rgba(245,242,255,1)_0%,_rgba(235,230,250,1)_55%,_rgba(225,220,245,1)_100%)]" />
 
-      {/* Drifting orbs */}
+      {/* Base gradient — dark */}
+      <div className="absolute inset-0 hidden dark:block bg-[radial-gradient(ellipse_at_top,_rgba(34,22,82,1)_0%,_rgba(10,8,28,1)_55%,_rgba(4,4,14,1)_100%)]" />
+
+      {/* Subtle grid lines (educational / technical feel) */}
+      <div className="absolute inset-0 bg-grid opacity-[0.35] dark:opacity-[0.18] mask-fade-b" />
+
+      {/* Drifting orbs — light */}
       <motion.div
-        className="absolute -top-40 -left-40 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-70 dark:opacity-60"
+        className="absolute -top-40 -left-40 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-50 dark:opacity-0"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(124,96,240,0.55) 0%, rgba(124,96,240,0) 70%)',
+        }}
+        animate={{ x: [0, 60, -30, 0], y: [0, -40, 30, 0] }}
+        transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className="absolute top-1/4 right-[-15vmin] h-[55vmin] w-[55vmin] rounded-full blur-[110px] opacity-45 dark:opacity-0"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(192,60,220,0.50) 0%, rgba(192,60,220,0) 70%)',
+        }}
+        animate={{ x: [0, -50, 40, 0], y: [0, 30, -30, 0] }}
+        transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className="absolute bottom-[-20vmin] left-1/3 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-40 dark:opacity-0"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(0,196,240,0.55) 0%, rgba(0,196,240,0) 70%)',
+        }}
+        animate={{ x: [0, 40, -40, 0], y: [0, -30, 20, 0] }}
+        transition={{ duration: 32, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* Drifting orbs — dark */}
+      <motion.div
+        className="absolute -top-40 -left-40 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-0 dark:opacity-60"
         style={{
           background:
             'radial-gradient(circle, rgba(129,90,255,0.85) 0%, rgba(129,90,255,0) 70%)',
@@ -26,7 +62,7 @@ export function MeshGradient() {
         transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
-        className="absolute top-1/4 right-[-15vmin] h-[55vmin] w-[55vmin] rounded-full blur-[110px] opacity-65 dark:opacity-55"
+        className="absolute top-1/4 right-[-15vmin] h-[55vmin] w-[55vmin] rounded-full blur-[110px] opacity-0 dark:opacity-55"
         style={{
           background:
             'radial-gradient(circle, rgba(255,70,190,0.75) 0%, rgba(255,70,190,0) 70%)',
@@ -35,7 +71,7 @@ export function MeshGradient() {
         transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
-        className="absolute bottom-[-20vmin] left-1/3 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-55 dark:opacity-45"
+        className="absolute bottom-[-20vmin] left-1/3 h-[60vmin] w-[60vmin] rounded-full blur-[110px] opacity-0 dark:opacity-50"
         style={{
           background:
             'radial-gradient(circle, rgba(0,200,255,0.80) 0%, rgba(0,200,255,0) 70%)',
@@ -44,7 +80,7 @@ export function MeshGradient() {
         transition={{ duration: 32, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
-        className="absolute bottom-10 right-10 h-[35vmin] w-[35vmin] rounded-full blur-[100px] opacity-50 dark:opacity-40"
+        className="absolute bottom-10 right-10 h-[35vmin] w-[35vmin] rounded-full blur-[100px] opacity-0 dark:opacity-40"
         style={{
           background:
             'radial-gradient(circle, rgba(120,255,210,0.7) 0%, rgba(120,255,210,0) 70%)',

@@ -31,10 +31,30 @@ interface UploadInput {
   onProgress?: (pct: number) => void
 }
 
+// Client-side pre-checks (fast feedback). The backend re-validates every rule
+// authoritatively (magic bytes, exact size, per-user quota) — this is UX, not security.
+export const MAX_UPLOAD_MB = 40
+const ALLOWED_EXTS = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.markdown']
+
+export function validateUploadFile(file: File): string | null {
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+  if (!ALLOWED_EXTS.includes(ext)) {
+    return 'Unsupported file type — PDF, DOCX, PPTX, TXT, or MD only.'
+  }
+  if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    return `File is too large — keep it under ${MAX_UPLOAD_MB} MB.`
+  }
+  return null
+}
+
 export function useUploadMaterial() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ courseId, file, sourceUrl, section, folder, tags, onProgress }: UploadInput) => {
+      if (file) {
+        const err = validateUploadFile(file)
+        if (err) throw new Error(err)
+      }
       const fd = new FormData()
       if (file) fd.append('file', file)
       if (sourceUrl) fd.append('source_url', sourceUrl)

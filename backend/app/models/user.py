@@ -37,6 +37,18 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     institution: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Google's stable subject id. We key OAuth users on this (not email — emails
+    # can change or be reassigned). Nullable for password-only accounts.
+    google_sub: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+    # Email verification (added in security hardening pass)
+    email_verified: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="0")
+    # Password reset token hash + expiry (avoid storing plaintext tokens at rest)
+    password_reset_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

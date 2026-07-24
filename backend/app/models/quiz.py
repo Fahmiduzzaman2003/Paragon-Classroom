@@ -147,6 +147,16 @@ class Attempt(Base):
     released: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     teacher_feedback: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
+    # Client-generated key that makes submission idempotent: a cold-start retry
+    # or flaky-network re-POST with the same key returns the original result
+    # instead of double-submitting.
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    # Submitted after the timer + grace window elapsed.
+    late: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Audit trail for LLM-assisted grading.
+    grading_model: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    rubric_version: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+
     quiz: Mapped["Quiz"] = relationship(back_populates="attempts")
     student: Mapped["User"] = relationship()
     attachments: Mapped[list["AttemptAttachment"]] = relationship(

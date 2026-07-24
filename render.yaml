@@ -1,0 +1,67 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy the Paragon backend reproducibly. In the Render dashboard:
+#   New + → Blueprint → connect this repo → Apply.
+# Then fill in the env vars marked `sync: false` (see docs/ENVIRONMENT_VARIABLES.md).
+services:
+  - type: web
+    name: paragon-api
+    runtime: python
+    plan: free
+    region: oregon            # free tier: oregon | frankfurt | singapore | ohio | virginia
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Bind 0.0.0.0 and Render's injected $PORT (required on Render).
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # ── Fixed production config ──────────────────────────────────
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: STORAGE_BACKEND
+        value: cloudinary
+      - key: VECTOR_BACKEND
+        value: pgvector
+      - key: EMBEDDING_PROVIDER
+        value: gemini
+      - key: GOOGLE_OAUTH_DEV_FALLBACK
+        value: "false"
+      - key: LLM_FALLBACK_CHAIN
+        value: gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,openrouter:meta-llama/llama-3.3-70b-instruct:free
+      # ── Auto-generated: a stable, secret JWT signing key ─────────
+      - key: JWT_SECRET
+        generateValue: true
+      # ── Secrets you must paste in the dashboard (sync: false) ────
+      - key: DATABASE_URL          # Neon: postgresql+asyncpg://user:pass@ep-xxx.neon.tech/db
+        sync: false
+      - key: CORS_ORIGINS          # your Vercel origin(s), comma-separated
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI   # https://<your-app>.vercel.app/auth/google/callback
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_UPLOAD_PRESET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # ── Optional (safe to leave unset) ───────────────────────────
+      - key: SENTRY_DSN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false

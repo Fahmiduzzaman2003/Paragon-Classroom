@@ -8,7 +8,6 @@ import {
   Settings2,
   Sparkles,
   LogOut,
-  Palette,
   BookOpen,
   KeyRound,
 } from 'lucide-react'
@@ -19,17 +18,24 @@ import { useAuthStore } from '@/stores/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
 import { useCourses } from '@/hooks/useCourses'
 
-const primaryNav = [
+// Items shown to every signed-in user. Role-gated items (e.g. Join exam —
+// students only) live below so they can be filtered by `useAuthStore`.
+const commonNav = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/app/inbox', label: 'Messages', icon: MessageSquareText },
   { to: '/app/leaderboard', label: 'Leaderboard', icon: Trophy },
+]
+
+// Student-only shortcuts. The teacher dashboard already exposes exam tools
+// through each course's "Quizzes" tab — the global "Join exam" entry point is
+// meaningless for them because they don't sit exams.
+const studentNav = [
   { to: '/app/exam/join', label: 'Join exam', icon: KeyRound },
 ]
 
 const secondaryNav = [
   { to: '/app/profile', label: 'Profile', icon: User2 },
-  { to: '/app/design-system', label: 'Design system', icon: Palette },
   { to: '/app/settings', label: 'Settings', icon: Settings2 },
 ]
 
@@ -38,31 +44,34 @@ export function Sidebar() {
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
   const { data: courses = [] } = useCourses()
+  const isStudent = user?.role === 'student'
 
   return (
-    <aside className="hidden lg:flex flex-col h-screen sticky top-0 w-[252px] shrink-0 p-4">
-      <div className="glass glass-hover rounded-3xl h-full flex flex-col p-3 overflow-hidden">
+    <aside className="hidden lg:flex flex-col h-screen sticky top-0 w-[264px] shrink-0 p-4">
+      <div className="glass glass-hover rounded-3xl h-full flex flex-col p-3 overflow-hidden border border-white/40 dark:border-white/8">
         {/* Brand */}
         <div className="px-2 py-2">
-          <NavLink to="/app" className="inline-flex">
+          <NavLink to="/app" className="inline-flex press focus-ring rounded-xl">
             <Logo />
           </NavLink>
         </div>
 
         {/* Primary nav */}
         <nav className="mt-4 flex flex-col gap-0.5">
-          {primaryNav.map((item) => (
+          {commonNav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
+          {isStudent &&
+            studentNav.map((item) => (
+              <SidebarLink key={item.to} {...item} />
+            ))}
         </nav>
 
         {/* My Courses */}
         <div className="mt-5 px-2">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              My Courses
-            </span>
-            <span className="text-[10px] text-muted-foreground">{courses.length}</span>
+            <span className="section-eyebrow !text-[9px] !py-0.5 !px-2">My Courses</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{courses.length}</span>
           </div>
           <div className="flex flex-col gap-0.5">
             {courses.slice(0, 4).map((c) => (
@@ -71,10 +80,10 @@ export function Sidebar() {
                 to={`/app/courses/${c.id}`}
                 className={({ isActive }) =>
                   cn(
-                    'group flex items-center gap-2.5 px-2 py-1.5 rounded-xl text-xs transition-colors',
+                    'group flex items-center gap-2.5 px-2 py-1.5 rounded-xl text-xs transition-colors press',
                     isActive
-                      ? 'bg-white/10 text-foreground'
-                      : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+                      ? 'bg-[rgb(var(--accent-primary)/0.16)] text-foreground border border-[rgb(var(--accent-primary)/0.30)]'
+                      : 'text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent',
                   )
                 }
               >
@@ -94,6 +103,11 @@ export function Sidebar() {
                 )}
               </NavLink>
             ))}
+            {courses.length === 0 && (
+              <p className="px-2 py-2 text-[11px] text-muted-foreground/80 leading-snug">
+                Enroll in a course to see it here.
+              </p>
+            )}
           </div>
         </div>
 
@@ -108,8 +122,8 @@ export function Sidebar() {
           className="relative mx-1 mb-3 rounded-2xl p-3 overflow-hidden"
           style={{
             background:
-              'linear-gradient(135deg, rgba(129,90,255,0.18), rgba(255,70,190,0.18) 50%, rgba(0,200,255,0.18))',
-            border: '1px solid rgba(255,255,255,0.12)',
+              'linear-gradient(135deg, rgba(124,96,240,0.18), rgba(192,60,220,0.16) 50%, rgba(0,196,240,0.18))',
+            border: '1px solid rgba(255,255,255,0.16)',
           }}
         >
           <div className="flex items-center gap-2 mb-1">
@@ -122,14 +136,14 @@ export function Sidebar() {
         </motion.div>
 
         {/* Secondary nav */}
-        <nav className="flex flex-col gap-0.5 border-t border-white/5 pt-2">
+        <nav className="flex flex-col gap-0.5 border-t border-white/10 dark:border-white/5 pt-2">
           {secondaryNav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
         </nav>
 
         {/* User */}
-        <div className="mt-2 flex items-center gap-2 p-2 rounded-2xl glass">
+        <div className="mt-2 flex items-center gap-2 p-2 rounded-2xl glass border border-white/30 dark:border-white/8">
           <Avatar className="h-8 w-8">
             {user?.avatarUrl && <AvatarImage src={user.avatarUrl} />}
             <AvatarFallback>{initials(user?.name ?? 'U')}</AvatarFallback>
@@ -143,7 +157,7 @@ export function Sidebar() {
               logout()
               navigate('/login')
             }}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition"
+            className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition press focus-ring"
             aria-label="Sign out"
             title="Sign out"
           >
@@ -172,10 +186,10 @@ function SidebarLink({
       end={end}
       className={({ isActive }) =>
         cn(
-          'group relative flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-colors',
+          'group relative flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium press focus-ring',
           isActive
-            ? 'text-foreground bg-white/10'
-            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+            ? 'text-foreground bg-white/10 border border-white/20'
+            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent',
         )
       }
     >
@@ -184,12 +198,15 @@ function SidebarLink({
           {isActive && (
             <motion.span
               layoutId="sidebar-active"
-              className="absolute inset-0 rounded-xl bg-white/8"
-              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+              className="absolute inset-0 rounded-xl bg-gradient-to-r from-[rgb(var(--accent-primary)/0.18)] via-[rgb(var(--accent-secondary)/0.14)] to-transparent"
+              transition={{ type: 'spring', stiffness: 420, damping: 38 }}
             />
           )}
           <Icon className="relative h-4 w-4" />
           <span className="relative">{label}</span>
+          {isActive && (
+            <span className="relative ml-auto h-1.5 w-1.5 rounded-full bg-[rgb(var(--accent-primary))] ring-pulse" />
+          )}
         </>
       )}
     </NavLink>
@@ -213,13 +230,17 @@ export function MobileBottomNav() {
           end={end}
           className={({ isActive }) =>
             cn(
-              'flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px]',
+              'flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px] press focus-ring',
               isActive ? 'text-foreground' : 'text-muted-foreground',
             )
           }
         >
-          <Icon className="h-4 w-4" />
-          {label}
+          {({ isActive }) => (
+            <>
+              <Icon className={cn('h-4 w-4', isActive && 'text-[rgb(var(--accent-primary))]')} />
+              {label}
+            </>
+          )}
         </NavLink>
       ))}
     </nav>

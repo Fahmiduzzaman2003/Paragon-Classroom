@@ -6,12 +6,14 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from ..config import settings
 from ..dependencies import CurrentUser, Database, assert_enrolled
+from ..services.limiter import limiter
 from ..models.conversation import Conversation, Message as MessageModel
 from ..models.course import Course
 from ..database import SessionLocal
@@ -21,7 +23,12 @@ from ..schemas.chat import (
     MessageOut,
     RagDebugChunk,
 )
-from ..services.llm import Message as LLMMessage, get_llm
+from ..services.llm import (
+    LLMQuotaError,
+    Message as LLMMessage,
+    chain_display,
+)
+from ..services.llm import stream as llm_stream
 from ..services.rag_service import build_rag_prompt, hybrid_retrieve
 
 log = logging.getLogger(__name__)
@@ -120,8 +127,9 @@ async def delete_conversation(
 # ─────────────────────────────────────────────────────
 
 @router.post("/courses/{course_id}/chat")
+@limiter.limit(settings.llm_rate_limit)
 async def chat_stream(
-    course_id: str, payload: ChatRequest, current: CurrentUser, db: Database
+    request: Request, course_id: str, payload: ChatRequest, current: CurrentUser, db: Database
 ):
     await assert_enrolled(db, current, course_id)
     course = await db.scalar(
@@ -220,7 +228,7 @@ async def chat_stream(
     )
 
     assistant_id = str(uuid.uuid4())
-    llm = get_llm()
+    model_display = chain_display()
 
     async def event_stream():
         # Open frames: tell client which conversation + meta
@@ -230,7 +238,7 @@ async def chat_stream(
                 "conversation_id": convo.id,
                 "message_id": assistant_id,
                 "user_message_id": user_msg.id,
-                "model": f"{llm.name}:{llm.model}",
+                "model": model_display,
                 "ai_name": course.ai_name,
             },
         )
@@ -241,7 +249,7 @@ async def chat_stream(
 
         buf_parts: list[str] = []
         try:
-            async for delta in llm.stream_completion(llm_messages):
+            async for delta in llm_stream(llm_messages, user_id=current.id):
                 if not delta:
                     continue
                 buf_parts.append(delta)
@@ -251,9 +259,12 @@ async def chat_stream(
         except asyncio.CancelledError:
             log.info("Client cancelled chat stream conversation=%s", convo.id)
             raise
-        except Exception as e:
-            log.exception("LLM streaming error: %s", e)
+        except LLMQuotaError as e:
             yield _sse("error", {"message": str(e)})
+        except Exception as e:
+            # Never leak raw provider errors to the client.
+            log.exception("LLM streaming error: %s", e)
+            yield _sse("error", {"message": "The AI service is temporarily unavailable. Please try again."})
 
         full = "".join(buf_parts).strip()
 
