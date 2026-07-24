@@ -63,8 +63,13 @@ class _OpenAIEmbeddings:
 
 
 class _GeminiEmbeddings:
-    """Hosted Gemini embeddings (``text-embedding-004``, 768-dim). Free tier, no
-    local model — the production default that keeps Render Free under its RAM cap."""
+    """Hosted Gemini embeddings (``gemini-embedding-001``, pinned to 768-dim).
+    Free tier, no local model — the production default that keeps Render Free
+    under its RAM cap.
+
+    We request ``output_dimensionality=768`` so vectors match the pgvector
+    ``vector(768)`` column. (The older ``text-embedding-004`` was retired by
+    Google — a call to it now 404s with "model not found for embedContent".)"""
 
     name = "gemini"
     dim = 768
@@ -74,7 +79,7 @@ class _GeminiEmbeddings:
 
         genai.configure(api_key=api_key)
         self._genai = genai
-        m = model or "text-embedding-004"
+        m = model or "gemini-embedding-001"
         self._model = m if m.startswith("models/") else f"models/{m}"
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -85,7 +90,10 @@ class _GeminiEmbeddings:
         for batch in _batched(texts, 100):
             resp = _with_retry(
                 lambda b=batch: self._genai.embed_content(
-                    model=self._model, content=b, task_type="retrieval_document"
+                    model=self._model,
+                    content=b,
+                    task_type="retrieval_document",
+                    output_dimensionality=self.dim,
                 )
             )
             emb = resp["embedding"]
