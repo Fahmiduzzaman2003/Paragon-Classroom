@@ -69,3 +69,6 @@ Thumbs.db
 *.tmp
 ~$*
 ~WRL*.tmp
+
+# Stray zero-byte artifact
+/backend/file
