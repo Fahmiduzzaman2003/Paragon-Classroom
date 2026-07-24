@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
@@ -89,19 +88,32 @@ app = FastAPI(
 # ─────────────────────────────────────────────────────
 # Rate limiter (in-memory; see services/limiter.py)
 # ─────────────────────────────────────────────────────
+# Per-route limits come from the @limiter.limit(...) decorators, which enforce
+# themselves via app.state.limiter + the exception handler below. We deliberately
+# do NOT add SlowAPIMiddleware: it's a BaseHTTPMiddleware that would buffer the
+# /chat SSE stream, and it only matters for global default_limits (which are []).
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 # ─────────────────────────────────────────────────────
 # Middleware
 # ─────────────────────────────────────────────────────
-# Explicit allowlist from CORS_ORIGINS (falls back to APP_FRONTEND_ORIGIN).
-# In development a regex also allows any localhost/127.0.0.1 port so every
-# Vite/preview port works without listing them. Preflight for Authorization +
-# Content-Type is handled by allow_headers=["*"].
+# Order matters: the LAST-added middleware is the OUTERMOST (runs first on the
+# request, last on the response). CORS MUST be outermost so its
+# Access-Control-Allow-Origin header attaches to every response — including the
+# streaming /chat SSE response and error responses. When CORS was nested inside
+# the other middleware, the streamed response reached the browser with no CORS
+# header and the chat silently failed (net::ERR_FAILED).
 _allowed_origins = settings.cors_origins_list or ["http://localhost:5173"]
 
+# Inner layers first (these run closest to the route).
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=(settings.max_upload_mb + 5) * 1024 * 1024)
+app.add_middleware(RequestIDMiddleware)
+
+# Outermost — added last. Explicit allowlist from CORS_ORIGINS (falls back to
+# APP_FRONTEND_ORIGIN). In development a regex also allows any localhost port.
+# Preflight for Authorization + Content-Type is handled by allow_headers=["*"].
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
@@ -112,12 +124,6 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
 )
 log.info("CORS allowlist: %s (regex=%s)", _allowed_origins, settings.cors_allow_origin_regex)
-
-# Order matters: added last runs first. Request ID should wrap everything so its
-# value is available to all downstream handlers and logs.
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(BodySizeLimitMiddleware, max_bytes=(settings.max_upload_mb + 5) * 1024 * 1024)
-app.add_middleware(RequestIDMiddleware)
 
 
 # ─────────────────────────────────────────────────────

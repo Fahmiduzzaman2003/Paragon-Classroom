@@ -31,7 +31,7 @@ services:
       - key: GOOGLE_OAUTH_DEV_FALLBACK
         value: "false"
       - key: LLM_FALLBACK_CHAIN
-        value: gemini:gemini-2.0-flash,groq:llama-3.3-70b-versatile,openrouter:meta-llama/llama-3.3-70b-instruct:free
+        value: openrouter:nvidia/nemotron-3-nano-30b-a3b:free,gemini:gemini-2.0-flash
       # ── Auto-generated: a stable, secret JWT signing key ─────────
       - key: JWT_SECRET
         generateValue: true
