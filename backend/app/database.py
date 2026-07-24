@@ -74,11 +74,54 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Lightweight forward-migration for existing dev SQLite DBs that pre-date
-        # the exam-mode columns. Alembic is the right tool in prod; here we just
-        # make sure the dev DB gets the new columns idempotently.
+        # Idempotent forward-migration for EXISTING databases that pre-date newer
+        # columns. create_all only creates missing tables — it never adds columns
+        # to a table that already exists — so without this a Neon DB from an
+        # earlier deploy would be missing (e.g.) users.firebase_uid and 500.
         if settings.is_sqlite:
             await conn.run_sync(_apply_dev_migrations)
+        else:
+            await conn.run_sync(_apply_pg_migrations)
+
+
+def _apply_pg_migrations(sync_conn) -> None:
+    """Idempotent ADD COLUMN IF NOT EXISTS for Postgres (Neon). Runs on every boot;
+    a no-op once the columns exist. Mirrors _apply_dev_migrations for prod."""
+    from sqlalchemy import text
+
+    stmts = [
+        # users
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false NOT NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash VARCHAR(128)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users (google_sub)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_firebase_uid ON users (firebase_uid)",
+        # quizzes
+        "ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS exam_code VARCHAR(8)",
+        "ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS exam_mode BOOLEAN DEFAULT false NOT NULL",
+        "ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS proctoring_enabled BOOLEAN DEFAULT false NOT NULL",
+        # questions
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS accepts_attachment BOOLEAN DEFAULT false NOT NULL",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_path VARCHAR(512)",
+        "ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_mime VARCHAR(100)",
+        # attempts
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS released BOOLEAN DEFAULT false NOT NULL",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS teacher_feedback TEXT DEFAULT '' NOT NULL",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS violations JSON DEFAULT '[]'::json NOT NULL",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(64)",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS late BOOLEAN DEFAULT false NOT NULL",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS grading_model VARCHAR(80) DEFAULT '' NOT NULL",
+        "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS rubric_version VARCHAR(20) DEFAULT '' NOT NULL",
+    ]
+    for s in stmts:
+        try:
+            sync_conn.execute(text(s))
+        except Exception as e:  # table may not exist yet, or race — safe to skip
+            import logging
+
+            logging.getLogger("paragon").warning("pg migration skipped (%s): %s", e, s)
 
 
 def _apply_dev_migrations(sync_conn) -> None:
