@@ -62,16 +62,23 @@ async def send_email(payload: EmailMessageData) -> None:
         return
 
     message = _build_message(payload)
+    # Pick the TLS mode from the port so any standard provider works without the
+    # user reasoning about implicit-vs-STARTTLS:
+    #   465        -> implicit TLS (SSL from the first byte)
+    #   587/2525/25 -> STARTTLS (upgrade a plaintext connection)
+    port = settings.smtp_port
+    implicit_tls = port == 465
     try:
         await aiosmtplib.send(
             message,
             hostname=settings.smtp_host,
-            port=settings.smtp_port,
+            port=port,
             username=settings.smtp_username,
             password=settings.smtp_password,
-            use_tls=settings.smtp_use_tls,
-            start_tls=not settings.smtp_use_tls and settings.smtp_port == 587,
+            use_tls=implicit_tls,
+            start_tls=not implicit_tls,
         )
+        log.info("Sent email to %s (subject=%s)", payload.to_email, payload.subject)
     except Exception as exc:  # noqa: BLE001 — never block sign-up on mail failure
         log.error("SMTP send failed for %s: %s", payload.to_email, exc)
 
