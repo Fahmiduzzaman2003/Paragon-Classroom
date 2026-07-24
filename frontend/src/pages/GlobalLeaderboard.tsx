@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Crown, Medal, Trophy } from 'lucide-react'
 import { useQueries } from '@tanstack/react-query'
 import { GlassCard } from '@/components/glass/GlassCard'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useCourses } from '@/hooks/useCourses'
@@ -112,6 +112,7 @@ export function GlobalLeaderboard() {
                       {e.rank}
                     </span>
                     <Avatar className="h-8 w-8">
+                      {e.avatar_url && <AvatarImage src={e.avatar_url} alt={e.name} />}
                       <AvatarFallback>{initials(e.name)}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
@@ -151,6 +152,7 @@ function Podium({ entry, rank, delay }: { entry: AggregatedEntry; rank: 1 | 2 | 
       <div className="flex flex-col items-center mb-2">
         <Icon className={cn('h-6 w-6 mb-1.5', color)} />
         <Avatar className="h-14 w-14 ring-2 ring-white/20">
+          {entry.avatar_url && <AvatarImage src={entry.avatar_url} alt={entry.name} />}
           <AvatarFallback className="text-base">{initials(entry.name)}</AvatarFallback>
         </Avatar>
         <div className="text-sm font-semibold mt-2 text-center">{entry.name}</div>

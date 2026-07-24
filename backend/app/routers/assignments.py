@@ -258,7 +258,7 @@ async def submit_assignment(
             log.exception("Submission upload failed")
             raise HTTPException(status_code=502, detail=f"Upload storage failed: {e}") from None
 
-        saved.append({"filename": stored.filename, "path": stored.url, "size": stored.size})
+        saved.append({"filename": safe_name, "path": stored.url, "size": stored.size})
 
     s = Submission(
         assignment_id=assignment_id,
