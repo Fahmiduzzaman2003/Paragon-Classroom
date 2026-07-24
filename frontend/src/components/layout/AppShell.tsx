@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar, MobileBottomNav } from './Sidebar'
 import { Topbar } from './Topbar'
+import { VerifyEmailBanner } from './VerifyEmailBanner'
 
 /**
  * Authenticated app chrome: persistent side rail on lg+, mobile bottom nav on
@@ -15,6 +16,7 @@ export function AppShell() {
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar />
+        <VerifyEmailBanner />
         <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-28 lg:pb-12 pt-2 max-w-[1400px] w-full mx-auto">
           <AnimatePresence mode="wait">
             <motion.div

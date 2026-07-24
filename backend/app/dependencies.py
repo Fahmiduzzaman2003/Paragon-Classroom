@@ -21,6 +21,27 @@ async def get_current_user(
 ) -> User:
     if not token:
         raise HTTPException(status_code=401, detail="Missing authentication token")
+
+    # Firebase mode: verify the ID token and auto-provision on first sight. If it
+    # isn't a valid Firebase token we fall through to the legacy JWT path (so
+    # admin scripts / the keyless dev flow still work).
+    from .config import settings
+
+    if settings.firebase_enabled:
+        from .services.firebase_auth import FirebaseAuthError, upsert_firebase_user, verify_id_token
+        from sqlalchemy import select
+
+        try:
+            identity = verify_id_token(token)
+        except FirebaseAuthError:
+            identity = None
+        if identity is not None:
+            user = await db.scalar(select(User).where(User.firebase_uid == identity.uid))
+            if user is not None:
+                return user
+            return await upsert_firebase_user(db, identity)  # first sign-in
+
+    # Legacy JWT path (email/password + dev flow).
     try:
         payload = decode_token(token, expected_type="access")
     except JWTError:

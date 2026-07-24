@@ -31,6 +31,8 @@ async def health() -> dict:
         "embedding_provider": settings.embedding_provider,
         # Diagnostics: what the server ACTUALLY sees, so config can be verified
         # without guessing.
+        "auth_provider": "firebase" if settings.firebase_enabled else "legacy-jwt",
+        "firebase_enabled": settings.firebase_enabled,
         "require_email_verification": settings.require_email_verification,
         "smtp_configured": settings.smtp_configured,
         "email_verification_enforced": settings.email_verification_enforced,

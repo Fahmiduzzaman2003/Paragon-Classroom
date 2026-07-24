@@ -5,7 +5,8 @@ import { GlassButton } from '@/components/glass/GlassButton'
 import { GlassInput } from '@/components/glass/GlassInput'
 import { Label } from '@/components/ui/Label'
 import { AuthShell } from '@/components/layout/AuthShell'
-import { api, apiError } from '@/lib/api'
+import { apiError } from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -18,9 +19,9 @@ export function ForgotPassword() {
     setLoading(true)
     setError('')
     try {
-      // The backend always responds 200 (anti-enumeration); we show the same
-      // confirmation regardless of whether the email exists.
-      await api.post('/auth/forgot-password', { email: email.trim() })
+      // Firebase sends the reset email; legacy hits the backend (which always
+      // responds 200 for anti-enumeration). Either way we show the same confirmation.
+      await useAuthStore.getState().sendPasswordReset(email.trim())
       setSent(true)
     } catch (err) {
       setError(apiError(err, 'Could not send the reset link. Please try again.'))

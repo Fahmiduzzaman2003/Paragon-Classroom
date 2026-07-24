@@ -135,3 +135,5 @@ def _apply_dev_migrations(sync_conn) -> None:
             add("users", "password_reset_expires_at DATETIME")
         if "google_sub" not in c:
             add("users", "google_sub VARCHAR(255)")
+        if "firebase_uid" not in c:
+            add("users", "firebase_uid VARCHAR(128)")

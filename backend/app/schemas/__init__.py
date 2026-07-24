@@ -1,4 +1,5 @@
 from .auth import (
+    FirebaseSyncRequest,
     ForgotPasswordRequest,
     GoogleDevSignInRequest,
     LoginRequest,
@@ -29,6 +30,7 @@ from .chat import (
 
 __all__ = [
     "ForgotPasswordRequest",
+    "FirebaseSyncRequest",
     "GoogleDevSignInRequest",
     "LoginRequest",
     "MessageResponse",

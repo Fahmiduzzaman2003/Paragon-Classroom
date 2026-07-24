@@ -42,6 +42,10 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True, nullable=True
     )
+    # Firebase Authentication uid — the canonical link when Firebase auth is on.
+    firebase_uid: Mapped[str | None] = mapped_column(
+        String(128), unique=True, index=True, nullable=True
+    )
     # Email verification (added in security hardening pass)
     email_verified: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="0")
     # Password reset token hash + expiry (avoid storing plaintext tokens at rest)

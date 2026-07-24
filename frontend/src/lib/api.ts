@@ -1,6 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 import { env } from '@/lib/env'
+import { firebaseEnabled, getFreshIdToken } from '@/lib/firebase'
 
 export const API_URL: string = env.API_URL
 
@@ -50,9 +51,12 @@ function isTransient(err: AxiosError): boolean {
   )
 }
 
-// Attach access token
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().accessToken
+// Attach access token. In Firebase mode we fetch a fresh ID token (the SDK
+// caches + auto-refreshes it); in legacy mode we use the stored access token.
+api.interceptors.request.use(async (config) => {
+  const token = firebaseEnabled
+    ? await getFreshIdToken()
+    : useAuthStore.getState().accessToken
   if (token) {
     config.headers = config.headers ?? {}
     ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
@@ -64,6 +68,12 @@ api.interceptors.request.use((config) => {
 let refreshing: Promise<string | null> | null = null
 
 async function doRefresh(): Promise<string | null> {
+  // Firebase: force a token refresh; the SDK re-mints from its refresh token.
+  if (firebaseEnabled) {
+    const token = await getFreshIdToken(true)
+    if (!token) useAuthStore.getState().logout()
+    return token
+  }
   const { refreshToken, setTokens, logout } = useAuthStore.getState()
   if (!refreshToken) return null
   try {

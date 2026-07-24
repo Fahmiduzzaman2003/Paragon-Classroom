@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
 from sqlalchemy import select
 
 from ..config import settings
-from ..dependencies import CurrentUser, Database
+from ..dependencies import CurrentUser, Database, oauth2_scheme
 from ..models.email_token import EmailToken, EmailTokenPurpose
 from ..models.user import Role, User
 from ..schemas import (
+    FirebaseSyncRequest,
     ForgotPasswordRequest,
     GoogleDevSignInRequest,
     LoginRequest,
@@ -25,6 +27,7 @@ from ..schemas import (
     UserUpdate,
     VerifyEmailRequest,
 )
+from ..services import firebase_auth
 from ..services import google as google_svc
 from ..services.email import EmailMessageData, generate_token, hash_token, send_email
 from ..services.limiter import limiter
@@ -122,6 +125,45 @@ async def update_me(payload: UserUpdate, current: CurrentUser, db: Database) -> 
     await db.commit()
     await db.refresh(current)
     return current
+
+
+@router.post("/sync", response_model=UserOut)
+async def firebase_sync(
+    payload: FirebaseSyncRequest,
+    db: Database,
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+) -> User:
+    """Provision (or fetch) the Paragon profile for a signed-in Firebase user.
+
+    Called by the frontend right after a Firebase sign-up so the chosen role is
+    applied on creation. Verifies the token itself (not via CurrentUser) so it
+    runs *before* any default-role auto-provisioning. Idempotent for existing
+    users — role is never downgraded here.
+    """
+    if not settings.firebase_enabled:
+        raise HTTPException(status_code=400, detail="Firebase auth is not enabled on this server")
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+    try:
+        identity = firebase_auth.verify_id_token(token)
+    except firebase_auth.FirebaseAuthError as exc:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token") from exc
+
+    user = await firebase_auth.upsert_firebase_user(db, identity, default_role=payload.role)
+
+    # Apply the display name / institution the user chose at signup (only fill
+    # blanks — never overwrite something they already set).
+    changed = False
+    if payload.name and (not user.name or user.name == identity.name):
+        user.name = payload.name.strip()
+        changed = True
+    if payload.institution and not user.institution:
+        user.institution = payload.institution.strip()
+        changed = True
+    if changed:
+        await db.commit()
+        await db.refresh(user)
+    return user
 
 
 # ─────────────────────────────────────────────────────

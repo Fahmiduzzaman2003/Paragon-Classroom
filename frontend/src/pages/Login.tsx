@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Label } from '@/components/ui/Label'
 import { useAuthStore } from '@/stores/authStore'
 import { API_URL, apiError } from '@/lib/api'
+import { firebaseEnabled } from '@/lib/firebase'
 
 // ─────────────────────────────────────────────────────
 // Real Google "G" badge — used in the sign-in button
@@ -58,10 +59,16 @@ export function Login() {
 
   const login = useAuthStore((s) => s.login)
   const loginWithGoogleDev = useAuthStore((s) => s.loginWithGoogleDev)
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle)
   const navigate = useNavigate()
 
-  // Detect Google OAuth mode (real redirect vs dev fallback)
+  // Detect Google OAuth mode. With Firebase we use its popup directly and skip
+  // the legacy descriptor probe.
   useEffect(() => {
+    if (firebaseEnabled) {
+      setGoogleReady(true)
+      return
+    }
     let cancelled = false
     ;(async () => {
       try {
@@ -91,6 +98,19 @@ export function Login() {
       toast.error(apiError(err, 'Sign-in failed'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleFirebase = async () => {
+    setGoogleBusy(true)
+    try {
+      await signInWithGoogle()
+      toast.success('Signed in with Google')
+      navigate('/app')
+    } catch (err) {
+      toast.error(apiError(err, 'Google sign-in failed'))
+    } finally {
+      setGoogleBusy(false)
     }
   }
 
@@ -193,8 +213,23 @@ export function Login() {
                 Pick up where you left off. Your course AIs have been studying.
               </p>
 
-              {/* Google sign-in — primary path */}
-              {googleReady && googleMode && (
+              {/* Google sign-in — Firebase popup (primary in production) */}
+              {googleReady && firebaseEnabled && (
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={handleGoogleFirebase}
+                    disabled={googleBusy}
+                    className="w-full inline-flex items-center justify-center gap-2.5 rounded-xl border border-white/15 dark:border-white/10 bg-white text-slate-900 hover:bg-slate-50 dark:bg-white/95 dark:hover:bg-white shadow-sm press focus-ring py-2.5 font-medium text-sm transition disabled:opacity-60"
+                  >
+                    <GoogleG className="h-5 w-5" />
+                    {googleBusy ? 'Signing in…' : 'Sign in with Google'}
+                  </button>
+                </div>
+              )}
+
+              {/* Google sign-in — legacy path (only when Firebase is off) */}
+              {googleReady && !firebaseEnabled && googleMode && (
                 <div className="mt-5">
                   {googleMode === 'redirect' ? (
                     <button

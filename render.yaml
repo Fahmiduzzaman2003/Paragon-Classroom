@@ -40,6 +40,8 @@ services:
         sync: false
       - key: CORS_ORIGINS          # your Vercel origin(s), comma-separated
         sync: false
+      - key: FIREBASE_PROJECT_ID   # your Firebase project id (enables Firebase auth)
+        sync: false
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET

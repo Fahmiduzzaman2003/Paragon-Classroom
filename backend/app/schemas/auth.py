@@ -91,3 +91,11 @@ class GoogleDevSignInRequest(BaseModel):
     email: EmailStr
     name: str | None = Field(default=None, max_length=120)
     role: Role = "student"
+
+
+class FirebaseSyncRequest(BaseModel):
+    """Sent by the frontend right after a Firebase sign-up so the backend creates
+    the profile with the chosen role. Role is applied only on account creation."""
+    role: RegisterableRole = "student"
+    name: str | None = Field(default=None, max_length=120)
+    institution: str | None = Field(default=None, max_length=200)

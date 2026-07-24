@@ -17,7 +17,8 @@ Every variable the app reads, where to set it, and how to get its value.
 | `APP_ENV` | Render | 🔴 | `production` | literal | Yes — `development` → `production` |
 | `APP_DEBUG` | Render | 🟢 | `false` | literal | Set `false` |
 | `APP_PORT` / `PORT` | Render | 🟢 | `10000` | Render injects `$PORT` | No (auto) |
-| `JWT_SECRET` | Render | 🔴 | `k3s...64chars` | `python -c "import secrets;print(secrets.token_urlsafe(64))"` — or let `render.yaml` `generateValue` do it | Yes — must be a real stable secret |
+| `JWT_SECRET` | Render | 🔴 | `k3s...64chars` | `python -c "import secrets;print(secrets.token_urlsafe(64))"` — or let `render.yaml` `generateValue` do it | Yes — still used for the legacy fallback path |
+| `FIREBASE_PROJECT_ID` | Render | 🟡→🔴 | `paragon-classroom` | Firebase Console → Project settings → Project ID. Enables Firebase auth (recommended). Blank = legacy email/password auth | Set it to use Firebase |
 | `CORS_ORIGINS` | Render | 🔴 | `https://paragon.vercel.app,https://paragon-git-main-you.vercel.app` | your Vercel domain(s) | Yes |
 | `DATABASE_URL` | Render | 🔴 | `postgresql+asyncpg://user:pass@ep-x.neon.tech/db` | Neon dashboard → Connection string (swap scheme to `postgresql+asyncpg`) | Yes — SQLite → Neon |
 | `DB_POOL_SIZE` | Render | 🟡 | `5` | literal | No |
@@ -53,6 +54,14 @@ Every variable the app reads, where to set it, and how to get its value.
 | `VITE_API_URL` | Vercel | 🔴 | `https://paragon-api.onrender.com` | your Render service URL | Yes |
 | `VITE_CLOUDINARY_CLOUD_NAME` | Vercel | 🟡 | `dxxxx` | Cloudinary dashboard | For profile-pic uploads |
 | `VITE_CLOUDINARY_UPLOAD_PRESET` | Vercel | 🟡 | `paragon_unsigned` | Cloudinary unsigned preset | For profile-pic uploads |
+| `VITE_FIREBASE_API_KEY` | Vercel | 🟡→🔴 | `AIzaSy...` | Firebase Console → Project settings → Web app SDK config | Set to use Firebase auth |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Vercel | 🟡→🔴 | `paragon-classroom.firebaseapp.com` | same SDK config | Set to use Firebase auth |
+| `VITE_FIREBASE_PROJECT_ID` | Vercel | 🟡→🔴 | `paragon-classroom` | same SDK config | Set to use Firebase auth |
+| `VITE_FIREBASE_APP_ID` | Vercel | 🟡→🔴 | `1:123:web:abc` | same SDK config | Set to use Firebase auth |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Vercel | 🟡 | `123456789` | same SDK config | Optional |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Vercel | 🟡 | `paragon-classroom.appspot.com` | same SDK config | Optional |
+
+> **Firebase web config is public by design** — these values are safe in the client bundle. When the four core `VITE_FIREBASE_*` values + backend `FIREBASE_PROJECT_ID` are set, auth uses Firebase (email/password + Google, with verification and reset emails sent by Firebase — **no SMTP, no Google-OAuth console setup, no `redirect_uri`**). Leave them blank to use the legacy flow.
 
 ## Values you paste INTO Google Cloud Console (not app env vars)
 

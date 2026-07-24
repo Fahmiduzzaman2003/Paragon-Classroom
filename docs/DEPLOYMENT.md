@@ -49,7 +49,27 @@ Sign up for each (no credit card required):
 - **Groq** (optional): https://console.groq.com/keys → `GROQ_API_KEY`.
 - **OpenRouter** (optional): https://openrouter.ai/keys → `OPENROUTER_API_KEY`.
 
-## 4. Google OAuth (login) — Cloud Console
+## 4. Authentication — Firebase (recommended) or Google OAuth (legacy)
+
+**Recommended: Firebase Authentication.** It sends verification + password-reset
+emails itself (no SMTP), does Google sign-in with no `redirect_uri` juggling, and
+manages tokens. Free (Spark plan), no card, **no service-account key**.
+
+1. https://console.firebase.google.com → **Add project** (name it e.g. `paragon-classroom`).
+2. In the project, click the **Web** icon (`</>`) → register an app → copy the
+   **SDK config** object (`apiKey`, `authDomain`, `projectId`, `appId`, …).
+3. **Build → Authentication → Get started** → enable **Email/Password** and **Google**.
+4. **Authentication → Settings → Authorized domains → Add domain:**
+   `paragon-classroom.vercel.app` (`localhost` is already there).
+5. You'll set the config values into Vercel (`VITE_FIREBASE_*`) in step 6, and
+   `FIREBASE_PROJECT_ID` on Render in step 5 — that's all. No OAuth consent screen,
+   no redirect URIs, no SMTP.
+
+> To skip Firebase and use the built-in email/password auth instead, just leave all
+> `FIREBASE_*` / `VITE_FIREBASE_*` vars blank and follow the legacy Google OAuth steps
+> below. The app auto-detects which mode to use.
+
+<details><summary>Legacy: Google OAuth (Cloud Console) — only if NOT using Firebase</summary>
 
 1. https://console.cloud.google.com → create/select a project.
 2. **APIs & Services → OAuth consent screen**:
@@ -67,6 +87,8 @@ Sign up for each (no credit card required):
      **Client secret** (`GOCSPX-...`).
 
    > You'll come back in **step 7** to add your production Vercel URLs here.
+
+</details>
 
 ---
 

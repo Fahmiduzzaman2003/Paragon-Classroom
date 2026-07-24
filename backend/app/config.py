@@ -66,7 +66,14 @@ class Settings(BaseSettings):
     smtp_from_name: str = "Paragon"
     smtp_use_tls: bool = True
 
-    # ── Google OAuth ───────────────────────────────────
+    # ── Firebase Authentication ────────────────────────
+    # When set, the backend verifies Firebase ID tokens (no service-account key
+    # needed — just the project id, used to validate the token audience). When
+    # blank, auth falls back to the legacy email/password + dev-Google JWT flow
+    # (keeps local dev + CI working with zero setup).
+    firebase_project_id: str = ""
+
+    # ── Google OAuth (legacy fallback; only used when Firebase is off) ──
     # Create credentials at https://console.cloud.google.com/apis/credentials
     # (OAuth client ID, Web application). Leave blank to fall back to a
     # deterministic dev-mode login (never allowed in production).
@@ -265,6 +272,10 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
+
+    @property
+    def firebase_enabled(self) -> bool:
+        return bool(self.firebase_project_id.strip())
 
     @property
     def smtp_configured(self) -> bool:
