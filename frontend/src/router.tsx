@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { Landing } from '@/pages/Landing'
 import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
+import { ForgotPassword } from '@/pages/ForgotPassword'
+import { ResetPassword } from '@/pages/ResetPassword'
+import { VerifyEmail } from '@/pages/VerifyEmail'
 import { GoogleCallback } from '@/pages/GoogleCallback'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
@@ -58,6 +61,9 @@ export const router = createBrowserRouter([
       { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
+      { path: '/forgot-password', element: <ForgotPassword /> },
+      { path: '/reset-password', element: <ResetPassword /> },
+      { path: '/verify-email', element: <VerifyEmail /> },
       { path: '/auth/google/callback', element: <GoogleCallback /> },
     ],
   },
