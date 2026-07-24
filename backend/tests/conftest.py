@@ -86,7 +86,7 @@ async def app(temp_env):
     all sessions in the same test (otherwise each session would see an
     empty database).
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import StaticPool
 
     from app import database as db_module
@@ -105,9 +105,11 @@ async def app(temp_env):
         connect_args={"check_same_thread": False, "uri": True},
         poolclass=StaticPool,
     )
-    db_module.SessionLocal = async_sessionmaker(  # type: ignore[attr-defined]
-        db_module.engine, expire_on_commit=False
-    )
+    # Rebind the EXISTING SessionLocal in place (don't replace the object), so
+    # modules that did `from ..database import SessionLocal` at import time
+    # (google, ingestion, jobs, chat) use this per-test engine too. Replacing the
+    # object would leave those captured references pointing at a stale engine.
+    db_module.SessionLocal.configure(bind=db_module.engine)  # type: ignore[attr-defined]
 
     # Wipe + recreate schema on the new engine.
     from app.database import Base

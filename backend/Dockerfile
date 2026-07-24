@@ -18,8 +18,10 @@ COPY . .
 
 EXPOSE 8000
 
-# Persisted volumes:  /app/uploads (file storage)  /app/chroma_data (vector store)
+# Render (and most PaaS) inject $PORT and route to it — bind that, not a fixed
+# port. Default to 8000 for plain `docker run`. `exec` so uvicorn becomes the
+# main process and receives SIGTERM for graceful shutdown.
 HEALTHCHECK --interval=20s --timeout=5s --retries=5 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/healthz" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

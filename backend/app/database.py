@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -16,14 +17,36 @@ class Base(DeclarativeBase):
     pass
 
 
+def _normalize_async_db_url(url: str) -> str:
+    """Make a Postgres URL safe for the async engine no matter how it was pasted.
+
+    Neon/Render hand you a plain ``postgresql://...?sslmode=require&channel_binding=...``
+    string. SQLAlchemy would then pick the *sync* psycopg2 driver (not installed),
+    and asyncpg doesn't understand those libpq query params. So: force the
+    ``+asyncpg`` driver and strip the query string (SSL is set via connect_args).
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    if url.startswith("postgresql+asyncpg://"):
+        parts = urlsplit(url)
+        url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    return url
+
+
+DB_URL = _normalize_async_db_url(settings.database_url)
+
 engine_kwargs: dict = {"echo": False, "future": True}
 if settings.is_sqlite:
     # aiosqlite: single connection by default is fine for local dev.
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    # Free Postgres (Neon) allows few connections and drops idle ones. Keep the
-    # pool small, pre-ping to avoid handing out dead connections after the DB
-    # auto-suspends, and recycle before the server times them out.
+    # Free Postgres (Neon) requires TLS and allows few connections that it drops
+    # when idle. asyncpg needs SSL set explicitly ("require" = encrypt, don't
+    # fuss over cert hostname). Keep the pool small + pre-ping so a connection
+    # dropped during auto-suspend is transparently replaced.
+    engine_kwargs["connect_args"] = {"ssl": "require"}
     engine_kwargs.update(
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
@@ -31,7 +54,7 @@ else:
         pool_recycle=settings.db_pool_recycle_s,
     )
 
-engine = create_async_engine(settings.database_url, **engine_kwargs)
+engine = create_async_engine(DB_URL, **engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
