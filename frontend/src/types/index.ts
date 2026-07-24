@@ -66,6 +66,8 @@ export interface ChatMessage {
   citations?: Citation[]
   createdAt: string
   streaming?: boolean
+  /** True when this answer was served instantly from the semantic cache. */
+  cached?: boolean
 }
 
 export interface Conversation {

@@ -4,7 +4,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import { motion } from 'framer-motion'
-import { Sparkles, User2 } from 'lucide-react'
+import { Sparkles, User2, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@/types'
 import { CitationChip } from './CitationChip'
@@ -47,6 +47,14 @@ export function MessageBubble({ message, aiName, gradient }: Props) {
           {message.streaming && (
             <span className="ml-2 inline-flex items-center gap-1 text-emerald-300">
               <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" /> streaming…
+            </span>
+          )}
+          {!isUser && message.cached && !message.streaming && (
+            <span
+              className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-amber-300"
+              title="Answered instantly from the semantic cache"
+            >
+              <Zap className="h-2.5 w-2.5" /> instant
             </span>
           )}
         </div>

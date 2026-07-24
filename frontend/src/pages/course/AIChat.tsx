@@ -63,6 +63,9 @@ export function AIChat() {
   )
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [debugChunks, setDebugChunks] = useState<RagDebugChunk[]>([])
+  // Assistant message ids that were served instantly from the semantic cache,
+  // so the "⚡ instant" badge survives the swap to the persisted message.
+  const [cachedIds, setCachedIds] = useState<Set<string>>(() => new Set())
 
   const clearScope = () => {
     const next = new URLSearchParams(searchParams)
@@ -94,11 +97,13 @@ export function AIChat() {
   }, [activeId])
 
   const messages = useMemo(() => {
-    const base = [...persistedMessages]
+    const base = persistedMessages.map((m) =>
+      cachedIds.has(m.id) ? { ...m, cached: true } : m,
+    )
     if (optimisticUser) base.push(optimisticUser)
     if (streamingMsg) base.push(streamingMsg)
     return base
-  }, [persistedMessages, streamingMsg, optimisticUser])
+  }, [persistedMessages, streamingMsg, optimisticUser, cachedIds])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -159,6 +164,10 @@ export function AIChat() {
       scopedMaterialId,
       debug: debugEnabled && isTeacher,
       onStart: (meta) => {
+        if (meta.cached) {
+          setCachedIds((prev) => new Set(prev).add(meta.message_id))
+          setStreamingMsg((m) => (m ? { ...m, cached: true } : m))
+        }
         if (!activeId) {
           setActiveId(meta.conversation_id)
           // Preserve any active scope (?material=...) when persisting the new conversation id.
