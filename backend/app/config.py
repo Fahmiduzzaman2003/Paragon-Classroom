@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Vercel production domain + stable preview alias. localhost is auto-added
     # in development via ``cors_allow_origin_regex``.
     cors_origins: str = ""
+    # Optional regex of additional allowed origins (advanced). When blank, Vercel
+    # preview URLs for any *.vercel.app project in CORS_ORIGINS are auto-allowed.
+    cors_origin_regex: str = ""
 
     # ── Security ───────────────────────────────────────
     jwt_secret: str = ""
@@ -302,11 +305,32 @@ class Settings(BaseSettings):
 
     @property
     def cors_allow_origin_regex(self) -> str | None:
-        """Allow any localhost/127.0.0.1 port in development so every Vite/preview
-        port works without listing them. Disabled in production."""
-        if self.is_production:
+        """Regex of extra allowed origins.
+
+        - An explicit ``CORS_ORIGIN_REGEX`` always wins.
+        - In development, any localhost/127.0.0.1 port is allowed.
+        - For every ``https://<project>.vercel.app`` in the allowlist we ALSO
+          auto-allow that project's Vercel **preview** URLs
+          (``https://<project>-<hash>.vercel.app``), so a preview deploy doesn't
+          get CORS-blocked. (Google sign-in still needs the prod domain in
+          Firebase — that can't be wildcarded.)
+        """
+        import re as _re
+
+        if self.cors_origin_regex.strip():
+            return self.cors_origin_regex.strip()
+
+        patterns: list[str] = []
+        if not self.is_production:
+            patterns.append(r"https?://(localhost|127\.0\.0\.1)(:\d+)?")
+        for o in self.cors_origins_list:
+            m = _re.match(r"https://([a-z0-9-]+)\.vercel\.app/?$", o)
+            if m:
+                proj = _re.escape(m.group(1))
+                patterns.append(rf"https://{proj}-[a-z0-9-]+\.vercel\.app")
+        if not patterns:
             return None
-        return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        return "^(" + "|".join(patterns) + ")$"
 
     @property
     def _effective_storage_backend(self) -> str:
