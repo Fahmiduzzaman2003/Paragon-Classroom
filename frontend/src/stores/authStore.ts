@@ -12,7 +12,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import type { User } from '@/types'
-import { API_URL } from '@/lib/api'
+import { API_URL, apiError } from '@/lib/api'
 import { auth, firebaseEnabled, getFreshIdToken, googleProvider } from '@/lib/firebase'
 
 interface RegisterPayload {
@@ -78,22 +78,36 @@ async function syncProfile(role?: 'teacher' | 'student', name?: string): Promise
   return mapUser(data)
 }
 
-/** Map a Firebase auth error to a clean, user-facing message. */
+/** Map a Firebase auth error (or a backend error from /auth/sync) to a clean,
+ * user-facing message. Non-Firebase (axios) errors are surfaced via apiError so
+ * a CORS / token-verification failure isn't hidden behind a generic message. */
 function firebaseError(err: unknown, fallback: string): Error {
+  // Backend call failed (e.g. /auth/sync or /auth/me): show the real cause.
+  if (axios.isAxiosError(err)) {
+    return new Error(apiError(err, `${fallback} (backend rejected the sign-in)`))
+  }
   const code = (err as { code?: string })?.code ?? ''
   const map: Record<string, string> = {
     'auth/invalid-credential': 'Invalid email or password.',
     'auth/invalid-email': 'That email address looks invalid.',
     'auth/user-not-found': 'Invalid email or password.',
     'auth/wrong-password': 'Invalid email or password.',
-    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/email-already-in-use': 'An account with this email already exists — try signing in instead.',
     'auth/weak-password': 'Password is too weak — use at least 6 characters.',
     'auth/popup-closed-by-user': 'Sign-in was cancelled.',
     'auth/popup-blocked': 'Your browser blocked the sign-in popup. Allow popups and retry.',
+    'auth/cancelled-popup-request': 'Sign-in was cancelled.',
     'auth/too-many-requests': 'Too many attempts — please wait a moment and try again.',
     'auth/network-request-failed': 'Network error — check your connection and retry.',
+    'auth/unauthorized-domain':
+      "This site isn't authorized in Firebase. Add your domain under Firebase → Authentication → Settings → Authorized domains.",
+    'auth/operation-not-allowed':
+      "This sign-in method isn't enabled in Firebase → Authentication → Sign-in method.",
+    'auth/account-exists-with-different-credential':
+      'This email is already registered with a different sign-in method.',
   }
-  return new Error(map[code] || fallback)
+  // Include the raw code in the fallback so an unmapped error is still diagnosable.
+  return new Error(map[code] || (code ? `Sign-in error (${code}).` : fallback))
 }
 
 // Module-local guard so the onIdTokenChanged listener doesn't race /auth/sync
