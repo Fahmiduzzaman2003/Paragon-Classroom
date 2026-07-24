@@ -267,6 +267,20 @@ class Settings(BaseSettings):
         return self.database_url.startswith("sqlite")
 
     @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_username and self.smtp_password)
+
+    @property
+    def email_verification_enforced(self) -> bool:
+        """Gate logins on verification ONLY when the link can actually reach the
+        user: a real SMTP server, or — in development — the console fallback a
+        dev can read from the logs. In PRODUCTION without SMTP, enforcing would
+        lock real users out of an inbox they never receive, so we don't."""
+        if not self.require_email_verification:
+            return False
+        return self.smtp_configured or self.app_env == "development"
+
+    @property
     def is_production(self) -> bool:
         return self.app_env in {"production", "staging"}
 

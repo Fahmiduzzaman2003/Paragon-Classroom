@@ -29,6 +29,12 @@ async def health() -> dict:
         "env": settings.app_env,
         "llm_provider": settings.active_llm_provider,
         "embedding_provider": settings.embedding_provider,
+        # Diagnostics: what the server ACTUALLY sees, so config can be verified
+        # without guessing.
+        "require_email_verification": settings.require_email_verification,
+        "smtp_configured": settings.smtp_configured,
+        "email_verification_enforced": settings.email_verification_enforced,
+        "frontend_base": settings.cors_origins_list[:2],
     }
 
 

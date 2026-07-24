@@ -65,16 +65,16 @@ async def register(request: Request, payload: RegisterRequest, db: Database) -> 
         name=payload.name.strip(),
         role=payload.role,
         institution=payload.institution,
-        # If verification isn't required, mark verified immediately so the
-        # student can use the account without the extra click.
-        email_verified=not settings.require_email_verification,
+        # If verification isn't enforced (flag off, or no SMTP to send with),
+        # mark verified immediately so the account is usable without the click.
+        email_verified=not settings.email_verification_enforced,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    # Best-effort: send the verification email when enabled.
-    if settings.require_email_verification:
+    # Best-effort: send the verification email when enforced.
+    if settings.email_verification_enforced:
         await _send_verification_email(db, user)
 
     return _issue_tokens(user)
@@ -88,7 +88,7 @@ async def login(request: Request, payload: LoginRequest, db: Database) -> TokenP
         # Identical message for "no such email" and "wrong password" to
         # avoid leaking which emails are registered.
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if settings.require_email_verification and not user.email_verified:
+    if settings.email_verification_enforced and not user.email_verified:
         raise HTTPException(
             status_code=403,
             detail="Email not verified — check your inbox or call /auth/resend-verification",
@@ -105,7 +105,7 @@ async def refresh(payload: RefreshRequest, db: Database) -> TokenPair:
     user = await db.get(User, claims["sub"])
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    if settings.require_email_verification and not user.email_verified:
+    if settings.email_verification_enforced and not user.email_verified:
         raise HTTPException(status_code=403, detail="Email not verified")
     return _issue_tokens(user)
 
@@ -129,8 +129,10 @@ async def update_me(payload: UserUpdate, current: CurrentUser, db: Database) -> 
 # ─────────────────────────────────────────────────────
 
 def _frontend_base() -> str:
-    # Use the first configured origin as the canonical frontend base.
-    origins = [o.strip() for o in settings.app_frontend_origin.split(",") if o.strip()]
+    # First allowed origin is the canonical frontend base — in production this is
+    # your Vercel URL (from CORS_ORIGINS), so emailed links point at the real app,
+    # not localhost.
+    origins = settings.cors_origins_list
     return origins[0] if origins else "http://localhost:5173"
 
 
