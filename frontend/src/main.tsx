@@ -7,8 +7,25 @@ import './styles/globals.css'
 import App from './App'
 import { queryClient } from './lib/queryClient'
 import { MeshGradient } from './components/background/MeshGradient'
+import { envError } from './lib/env'
 
-createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root')!
+
+// If the app is misconfigured (e.g. VITE_API_URL missing on a Vercel deploy),
+// show a readable message instead of a blank screen.
+if (envError) {
+  rootEl.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+                font-family:system-ui,sans-serif;color:#e6e6f0;background:#0b0a1a;text-align:center">
+      <div style="max-width:560px">
+        <h1 style="font-size:20px;margin:0 0 12px">Configuration needed</h1>
+        <p style="opacity:.8;line-height:1.5;margin:0">${envError}</p>
+      </div>
+    </div>`
+  throw new Error(envError) // stop here; nothing else to render
+}
+
+createRoot(rootEl).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={150}>
