@@ -37,9 +37,10 @@ import { toast } from 'sonner'
 import type { ChatMessage, Citation, Course } from '@/types'
 
 function groundingLabel(g: number): string {
-  if (g >= 70) return 'Strict'
-  if (g >= 35) return 'Balanced'
-  return 'Open'
+  // Thresholds mirror the backend's grounding tiers so the label matches behavior.
+  if (g >= 75) return 'Strict'
+  if (g <= 25) return 'Open'
+  return 'Balanced'
 }
 
 const suggestedPrompts: Record<string, string[]> = {

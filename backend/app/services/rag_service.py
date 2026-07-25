@@ -34,27 +34,40 @@ def resolve_grounding(
 
 def _grounding_instruction(level: int) -> str:
     """Turn a 0–100 grounding level into a retrieval-policy instruction. Higher =
-    stay closer to the course sources; lower = lean on general knowledge."""
+    stay closer to the course sources; lower = lean on general knowledge.
+
+    Note the deliberate anti-false-refusal wording in strict mode: the earlier
+    version primed "I could not find this" so strongly that the model refused
+    even when the answer WAS in the sources (e.g. matching "naeem" to the full
+    name "Golam Mostofa Naeem"). Strict now insists on a careful read first and
+    reserves the refusal for genuine absence."""
     lvl = max(0, min(100, int(level)))
     src, gen = lvl, 100 - lvl
-    if lvl >= 90:
+    if lvl >= 75:
         return (
-            "Answer almost entirely from the provided course sources (aim for ~95% grounded in "
-            'them). If the sources do not contain the answer, say exactly: "I could not find this '
-            'in the course materials." Only add outside knowledge when strictly necessary, and '
-            'mark it "(general knowledge)". Cite every source-based claim with its [n] marker.'
+            "Answer strictly from the provided course sources. Read ALL of the excerpts carefully "
+            "before deciding anything — the answer is very often present even when the question uses "
+            "different, partial, or informal wording (for example a first name where a source gives "
+            "the full name), or when it is spread across several excerpts. If the sources support an "
+            "answer, give it directly and cite the relevant ones with [n]. Reserve the exact sentence "
+            '"I could not find this in the course materials." for the case where, after a genuine '
+            "careful read, the sources truly contain nothing relevant. Do not add facts that are not "
+            "in the sources."
         )
-    if lvl <= 15:
+    if lvl <= 25:
         return (
-            "Answer primarily from your broad general knowledge, giving a complete and helpful "
-            "explanation. Treat the provided course sources as optional supporting context — draw "
-            "on them where relevant and cite them with [n], but do not limit yourself to them."
+            "Answer primarily from your broad general knowledge, giving a complete and genuinely "
+            "helpful explanation. Use the provided course sources as supporting context wherever they "
+            "are relevant and cite them with [n] — but do not limit yourself to them, and never refuse "
+            "just because the sources are thin."
         )
     return (
-        f"Blend two knowledge sources in roughly a {src}:{gen} ratio — about {src}% grounded in the "
-        f"provided course materials and about {gen}% from your broader general knowledge. Prefer the "
-        f"course materials for anything they cover and cite them with [n]; use general knowledge to "
-        f'fill gaps and add context, marking non-source claims "(general knowledge)".'
+        f"Use BOTH the provided course sources and your general knowledge, weighted roughly {src}% "
+        f"toward the sources and {gen}% toward general knowledge. Read the sources carefully and prefer "
+        f"them for anything they cover — matching partial or informal phrasing in the question to what "
+        f"they actually say — and cite them with [n]. Use general knowledge to add context or fill "
+        f'gaps, marking those claims "(general knowledge)". Do not refuse when the sources are thin; '
+        f"answer from general knowledge instead."
     )
 
 
@@ -205,6 +218,9 @@ def build_rag_prompt(
         "## Retrieval policy\n"
         f"{instruction}\n\n"
         "## Answer style\n"
+        "- Read every source excerpt below before answering. Match the user's wording — including "
+        "partial names, acronyms, or informal phrasing — to what the sources actually say (e.g. a "
+        "first name may appear as a full name).\n"
         "- Use GitHub-flavored Markdown.\n"
         "- Inline-cite sources using their bracket number, e.g. [1], [2].\n"
         "- Prefer short, direct answers over long preambles. Use bullet lists and code "
