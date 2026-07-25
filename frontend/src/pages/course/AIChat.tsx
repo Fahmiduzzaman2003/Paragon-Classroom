@@ -207,11 +207,16 @@ export function AIChat() {
         if (!activeId) {
           skipClearRef.current = true // don't let the activeId effect wipe the in-flight message
           setActiveId(meta.conversation_id)
-          // Preserve any active scope (?material=...) when persisting the new conversation id.
+          // Update the address bar WITHOUT going through the router. A router
+          // navigate() here re-matches the route and remounts AIChat mid-stream —
+          // which reset the grounding slider and looked like a page refresh.
+          // history.replaceState changes the URL silently; the component stays put.
           const search = scopedMaterialId ? `?material=${scopedMaterialId}` : ''
-          navigate(`/app/courses/${course.id}/chat/${meta.conversation_id}${search}`, {
-            replace: true,
-          })
+          window.history.replaceState(
+            window.history.state,
+            '',
+            `/app/courses/${course.id}/chat/${meta.conversation_id}${search}`,
+          )
         }
       },
       onCitations: (citations) => {
