@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip'
 import { MessageBubble } from '@/components/chat/MessageBubble'
+import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator'
 import { useMaterials } from '@/hooks/useMaterials'
 import {
   useConversationMessages,
@@ -66,6 +67,10 @@ export function AIChat() {
   // Assistant message ids that were served instantly from the semantic cache,
   // so the "⚡ instant" badge survives the swap to the persisted message.
   const [cachedIds, setCachedIds] = useState<Set<string>>(() => new Set())
+  // When we create a NEW conversation mid-send, onStart bumps `activeId`. That
+  // must NOT wipe the in-flight optimistic/streaming message — this ref tells the
+  // activeId effect to skip its reset exactly once for that programmatic change.
+  const skipClearRef = useRef(false)
 
   const clearScope = () => {
     const next = new URLSearchParams(searchParams)
@@ -89,8 +94,13 @@ export function AIChat() {
     if (urlConversationId && urlConversationId !== activeId) setActiveId(urlConversationId)
   }, [urlConversationId, activeId])
 
-  // Clear streaming message when the active conversation changes
+  // Clear streaming message when the active conversation changes — but NOT when
+  // that change was us persisting a brand-new conversation mid-stream.
   useEffect(() => {
+    if (skipClearRef.current) {
+      skipClearRef.current = false
+      return
+    }
     setStreamingMsg(null)
     setOptimisticUser(null)
     setDebugChunks([])
@@ -101,7 +111,9 @@ export function AIChat() {
       cachedIds.has(m.id) ? { ...m, cached: true } : m,
     )
     if (optimisticUser) base.push(optimisticUser)
-    if (streamingMsg) base.push(streamingMsg)
+    // While the streamed message is still empty, the ThinkingIndicator stands in
+    // for it — so only render the assistant bubble once the first token lands.
+    if (streamingMsg && streamingMsg.content) base.push(streamingMsg)
     return base
   }, [persistedMessages, streamingMsg, optimisticUser, cachedIds])
 
@@ -184,6 +196,7 @@ export function AIChat() {
           setStreamingMsg((m) => (m ? { ...m, cached: true } : m))
         }
         if (!activeId) {
+          skipClearRef.current = true // don't let the activeId effect wipe the in-flight message
           setActiveId(meta.conversation_id)
           // Preserve any active scope (?material=...) when persisting the new conversation id.
           const search = scopedMaterialId ? `?material=${scopedMaterialId}` : ''
@@ -378,9 +391,7 @@ export function AIChat() {
                 ))
               )}
               {chat.streaming && streamingMsg && streamingMsg.content === '' && (
-                <div className="text-[11px] text-muted-foreground pl-11">
-                  Retrieving {ready.length} sources…
-                </div>
+                <ThinkingIndicator gradient={course.gradient} />
               )}
             </div>
           </ScrollArea>

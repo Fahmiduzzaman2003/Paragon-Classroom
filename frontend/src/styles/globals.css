@@ -319,6 +319,30 @@
     animation: stream-caret 1s ease-in-out infinite;
   }
 
+  /* Shimmering "Thinking…" text for the working indicator. */
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      rgba(155, 124, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.95) 45%,
+      rgba(255, 70, 190, 0.7) 60%,
+      rgba(155, 124, 255, 0.55) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer-sweep 1.9s linear infinite;
+  }
+  @keyframes shimmer-sweep {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
   /* ----------------- Prose (chat markdown) ----------------- */
   .prose-chat {
     color: rgb(var(--foreground));
