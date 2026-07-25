@@ -79,9 +79,14 @@ function MessageBubbleInner({ message, aiName, gradient }: Props) {
           {!isUser && message.cached && !message.streaming && (
             <span
               className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-amber-300"
-              title="Answered instantly from the semantic cache"
+              title={`Served instantly from the semantic cache${
+                typeof message.grounding === 'number' ? ` (at ${message.grounding}% grounding)` : ''
+              }`}
             >
               <Zap className="h-2.5 w-2.5" /> instant
+              {typeof message.grounding === 'number' && (
+                <span className="opacity-80">· {message.grounding}%</span>
+              )}
             </span>
           )}
         </div>

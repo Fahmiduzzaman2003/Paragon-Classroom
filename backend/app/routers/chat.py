@@ -273,6 +273,10 @@ async def chat_stream(
                 "model": "semantic-cache" if cache_hit else model_display,
                 "ai_name": course.ai_name,
                 "cached": bool(cache_hit),
+                # The grounding this answer was produced at. For a cache hit it
+                # equals the requested grounding (the cache is keyed on it), so
+                # the client can verify per-grounding caching is working.
+                "grounding": effective_grounding,
             },
         )
         if citations_payload:

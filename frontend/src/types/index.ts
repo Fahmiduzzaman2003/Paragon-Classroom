@@ -68,6 +68,8 @@ export interface ChatMessage {
   streaming?: boolean
   /** True when this answer was served instantly from the semantic cache. */
   cached?: boolean
+  /** Grounding level (0–100) this answer was produced at. */
+  grounding?: number
 }
 
 export interface Conversation {

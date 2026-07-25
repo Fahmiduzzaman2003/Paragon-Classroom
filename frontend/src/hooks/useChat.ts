@@ -64,7 +64,7 @@ interface StreamArgs {
   grounding?: number
   scopedMaterialId?: string | null
   debug?: boolean
-  onStart?: (meta: { conversation_id: string; message_id: string; user_message_id: string; ai_name: string; model: string; cached?: boolean }) => void
+  onStart?: (meta: { conversation_id: string; message_id: string; user_message_id: string; ai_name: string; model: string; cached?: boolean; grounding?: number }) => void
   onCitations?: (citations: Citation[]) => void
   onDebug?: (chunks: RagDebugChunk[]) => void
   onDelta?: (text: string) => void

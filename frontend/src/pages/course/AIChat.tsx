@@ -73,9 +73,10 @@ export function AIChat() {
   })
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [debugChunks, setDebugChunks] = useState<RagDebugChunk[]>([])
-  // Assistant message ids that were served instantly from the semantic cache,
-  // so the "⚡ instant" badge survives the swap to the persisted message.
-  const [cachedIds, setCachedIds] = useState<Set<string>>(() => new Set())
+  // Assistant message id → grounding level, for answers served instantly from
+  // the semantic cache; lets the "⚡ instant · N%" badge survive the swap to the
+  // persisted message and show which grounding the cached answer belongs to.
+  const [cachedGrounding, setCachedGrounding] = useState<Map<string, number>>(() => new Map())
   // When we create a NEW conversation mid-send, onStart bumps `activeId`. That
   // must NOT wipe the in-flight optimistic/streaming message — this ref tells the
   // activeId effect to skip its reset exactly once for that programmatic change.
@@ -117,14 +118,14 @@ export function AIChat() {
 
   const messages = useMemo(() => {
     const base = persistedMessages.map((m) =>
-      cachedIds.has(m.id) ? { ...m, cached: true } : m,
+      cachedGrounding.has(m.id) ? { ...m, cached: true, grounding: cachedGrounding.get(m.id) } : m,
     )
     if (optimisticUser) base.push(optimisticUser)
     // While the streamed message is still empty, the ThinkingIndicator stands in
     // for it — so only render the assistant bubble once the first token lands.
     if (streamingMsg && streamingMsg.content) base.push(streamingMsg)
     return base
-  }, [persistedMessages, streamingMsg, optimisticUser, cachedIds])
+  }, [persistedMessages, streamingMsg, optimisticUser, cachedGrounding])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -201,8 +202,8 @@ export function AIChat() {
       debug: debugEnabled && isTeacher,
       onStart: (meta) => {
         if (meta.cached) {
-          setCachedIds((prev) => new Set(prev).add(meta.message_id))
-          setStreamingMsg((m) => (m ? { ...m, cached: true } : m))
+          setCachedGrounding((prev) => new Map(prev).set(meta.message_id, meta.grounding ?? 0))
+          setStreamingMsg((m) => (m ? { ...m, cached: true, grounding: meta.grounding } : m))
         }
         if (!activeId) {
           skipClearRef.current = true // don't let the activeId effect wipe the in-flight message
