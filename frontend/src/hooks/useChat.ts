@@ -60,6 +60,8 @@ interface StreamArgs {
   message: string
   conversationId: string | null
   ragMode?: 'strict' | 'balanced' | 'open'
+  /** 0–100 grounding level (how much to rely on course materials). Wins over ragMode. */
+  grounding?: number
   scopedMaterialId?: string | null
   debug?: boolean
   onStart?: (meta: { conversation_id: string; message_id: string; user_message_id: string; ai_name: string; model: string; cached?: boolean }) => void
@@ -116,6 +118,7 @@ export function useChatStream() {
             message: args.message,
             conversation_id: args.conversationId ?? null,
             rag_mode: args.ragMode ?? null,
+            grounding: args.grounding ?? null,
             scoped_material_id: args.scopedMaterialId ?? null,
             debug: !!args.debug,
           }),

@@ -15,22 +15,47 @@ from .vector_store import all_documents, query as vector_query
 log = logging.getLogger(__name__)
 
 
-_RAG_MODE_INSTRUCTIONS: dict[str, str] = {
-    "strict": (
-        "Answer ONLY from the provided sources. If the sources do not contain the answer, "
-        'say exactly: "I could not find this in the course materials." Do not supplement '
-        "with outside knowledge."
-    ),
-    "balanced": (
-        "Prefer the provided sources. If they do not fully cover the question, you may "
-        "supplement with general knowledge, but clearly mark outside claims with "
-        "\"(general knowledge)\". Always cite sources for claims that come from them."
-    ),
-    "open": (
-        "Use the provided sources as context, but feel free to reason beyond them. Still cite "
-        "any claim that is supported by a source using its [n] marker."
-    ),
-}
+# Named presets → a grounding level (0–100). The UI slider is continuous; these
+# are just the three snap points.
+_MODE_GROUNDING: dict[str, int] = {"strict": 95, "balanced": 50, "open": 20}
+
+
+def resolve_grounding(
+    grounding: int | None, rag_mode: str | None, course_mode: str | None
+) -> int:
+    """Resolve the effective grounding level (0–100). An explicit numeric
+    `grounding` (the UI slider) wins; otherwise fall back to the named mode, then
+    the course default, then balanced."""
+    if grounding is not None:
+        return max(0, min(100, int(grounding)))
+    mode = (rag_mode or course_mode or "balanced").lower()
+    return _MODE_GROUNDING.get(mode, 50)
+
+
+def _grounding_instruction(level: int) -> str:
+    """Turn a 0–100 grounding level into a retrieval-policy instruction. Higher =
+    stay closer to the course sources; lower = lean on general knowledge."""
+    lvl = max(0, min(100, int(level)))
+    src, gen = lvl, 100 - lvl
+    if lvl >= 90:
+        return (
+            "Answer almost entirely from the provided course sources (aim for ~95% grounded in "
+            'them). If the sources do not contain the answer, say exactly: "I could not find this '
+            'in the course materials." Only add outside knowledge when strictly necessary, and '
+            'mark it "(general knowledge)". Cite every source-based claim with its [n] marker.'
+        )
+    if lvl <= 15:
+        return (
+            "Answer primarily from your broad general knowledge, giving a complete and helpful "
+            "explanation. Treat the provided course sources as optional supporting context — draw "
+            "on them where relevant and cite them with [n], but do not limit yourself to them."
+        )
+    return (
+        f"Blend two knowledge sources in roughly a {src}:{gen} ratio — about {src}% grounded in the "
+        f"provided course materials and about {gen}% from your broader general knowledge. Prefer the "
+        f"course materials for anything they cover and cite them with [n]; use general knowledge to "
+        f'fill gaps and add context, marking non-source claims "(general knowledge)".'
+    )
 
 
 @dataclass(slots=True)
@@ -142,10 +167,11 @@ def build_rag_prompt(
     chunks: list[RetrievedChunk],
     recent_messages: list[tuple[str, str]] | None = None,
     rag_mode: str | None = None,
+    grounding: int | None = None,
 ) -> list[Message]:
     """Compose the messages array for the LLM call."""
-    mode = (rag_mode or course.rag_mode or "balanced").lower()
-    instruction = _RAG_MODE_INSTRUCTIONS.get(mode, _RAG_MODE_INSTRUCTIONS["balanced"])
+    level = resolve_grounding(grounding, rag_mode, course.rag_mode)
+    instruction = _grounding_instruction(level)
 
     # Assemble a token-budgeted source block. Chunks arrive most-relevant-first,
     # so we keep taking them until the budget is spent, then stop — a

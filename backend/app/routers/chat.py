@@ -30,7 +30,7 @@ from ..services.llm import (
     chain_display,
 )
 from ..services.llm import stream as llm_stream
-from ..services.rag_service import build_rag_prompt, hybrid_retrieve
+from ..services.rag_service import build_rag_prompt, hybrid_retrieve, resolve_grounding
 from ..services import vector_store
 
 log = logging.getLogger(__name__)
@@ -190,10 +190,17 @@ async def chat_stream(
     # retrieval and the LLM. Only new conversations are cacheable, so follow-ups
     # (which depend on prior turns) always run normally. Fail-open: any cache
     # error falls straight through to the normal path.
+    # Resolve the grounding level the student asked for, and the course default.
+    # The cache is keyed by question only, so it's only safe to reuse an answer
+    # when the grounding matches the default — a custom slider value always gets
+    # a fresh answer.
+    effective_grounding = resolve_grounding(payload.grounding, payload.rag_mode, course.rag_mode)
+    default_grounding = resolve_grounding(None, None, course.rag_mode)
     cacheable = (
         settings.semantic_cache_enabled
         and not payload.conversation_id
         and not payload.scoped_material_id
+        and effective_grounding == default_grounding
     )
     cache_hit: dict | None = None
     if cacheable:
@@ -254,7 +261,7 @@ async def chat_stream(
             question=payload.message,
             chunks=retrieved,
             recent_messages=recent,
-            rag_mode=payload.rag_mode,
+            grounding=effective_grounding,
         )
 
     async def event_stream():

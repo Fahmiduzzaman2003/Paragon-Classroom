@@ -319,6 +319,47 @@
     animation: stream-caret 1s ease-in-out infinite;
   }
 
+  /* Grounding slider: gradient-filled track + glowing thumb. */
+  .paragon-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      #815aff 0%,
+      #ff46be var(--val, 50%),
+      rgba(255, 255, 255, 0.1) var(--val, 50%),
+      rgba(255, 255, 255, 0.1) 100%
+    );
+    outline: none;
+    cursor: pointer;
+  }
+  .paragon-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #815aff;
+    box-shadow: 0 2px 8px rgba(129, 90, 255, 0.55);
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .paragon-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+  }
+  .paragon-slider::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #815aff;
+    box-shadow: 0 2px 8px rgba(129, 90, 255, 0.55);
+    cursor: pointer;
+  }
+
   /* Shimmering "Thinking…" text for the working indicator. */
   .shimmer-text {
     background: linear-gradient(

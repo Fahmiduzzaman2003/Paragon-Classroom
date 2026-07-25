@@ -10,6 +10,10 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = None
     rag_mode: Literal["strict", "balanced", "open"] | None = None
+    # Continuous grounding control (0–100): how much the answer should rely on the
+    # course materials vs. the model's general knowledge. Takes precedence over
+    # rag_mode when set. 95≈strict, 50≈balanced, 20≈open.
+    grounding: int | None = Field(default=None, ge=0, le=100)
     scoped_material_id: str | None = None  # "Ask AI on this file"
     debug: bool = False
 

@@ -36,6 +36,12 @@ import { apiError } from '@/lib/api'
 import { toast } from 'sonner'
 import type { ChatMessage, Citation, Course } from '@/types'
 
+function groundingLabel(g: number): string {
+  if (g >= 70) return 'Strict'
+  if (g >= 35) return 'Balanced'
+  return 'Open'
+}
+
 const suggestedPrompts: Record<string, string[]> = {
   default: [
     'Summarize the uploaded materials in 5 bullets',
@@ -59,9 +65,12 @@ export function AIChat() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeId, setActiveId] = useState<string | null>(urlConversationId ?? null)
   const [draft, setDraft] = useState('')
-  const [ragMode, setRagMode] = useState<'strict' | 'balanced' | 'open'>(
-    (course as Course & { ragMode?: 'strict' | 'balanced' | 'open' }).ragMode ?? 'balanced',
-  )
+  // Grounding: 0–100. How much the answer leans on the course materials vs.
+  // general knowledge. Seeded from the course's default retrieval mode.
+  const [grounding, setGrounding] = useState<number>(() => {
+    const m = (course as Course & { ragMode?: 'strict' | 'balanced' | 'open' }).ragMode
+    return m === 'strict' ? 95 : m === 'open' ? 20 : 50
+  })
   const [debugEnabled, setDebugEnabled] = useState(false)
   const [debugChunks, setDebugChunks] = useState<RagDebugChunk[]>([])
   // Assistant message ids that were served instantly from the semantic cache,
@@ -187,7 +196,7 @@ export function AIChat() {
       courseId: course.id,
       message: content,
       conversationId: activeId,
-      ragMode,
+      grounding,
       scopedMaterialId,
       debug: debugEnabled && isTeacher,
       onStart: (meta) => {
@@ -273,34 +282,54 @@ export function AIChat() {
           </div>
         </ScrollArea>
 
-        <div className="p-3 border-t border-white/5 space-y-2">
+        <div className="p-3 border-t border-white/5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Retrieval mode
+              Source grounding
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-3 w-3 text-muted-foreground" />
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-60">
-                Strict: answer only from materials. Balanced: supplement with general knowledge.
-                Open: reason freely.
+              <TooltipContent side="top" className="max-w-64">
+                How much the AI leans on your course materials vs. its general knowledge. Higher =
+                stays closer to your sources; lower = reasons more freely. Drag the slider or tap a
+                preset.
               </TooltipContent>
             </Tooltip>
           </div>
-          <div className="flex gap-1 glass rounded-full p-0.5">
-            {(['strict', 'balanced', 'open'] as const).map((m) => (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-medium text-gradient">{groundingLabel(grounding)}</span>
+            <span className="text-muted-foreground">{grounding}% from materials</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={grounding}
+            onChange={(e) => setGrounding(Number(e.target.value))}
+            className="paragon-slider w-full"
+            style={{ ['--val' as string]: `${grounding}%` }}
+            aria-label="Source grounding level"
+          />
+          <div className="flex gap-1">
+            {([
+              ['Strict', 95],
+              ['Balanced', 50],
+              ['Open', 20],
+            ] as const).map(([label, val]) => (
               <button
-                key={m}
-                onClick={() => setRagMode(m)}
+                key={label}
+                onClick={() => setGrounding(val)}
                 className={cn(
-                  'flex-1 text-[10px] py-1 rounded-full capitalize transition',
-                  ragMode === m
+                  'flex-1 text-[10px] py-1 rounded-full transition',
+                  Math.abs(grounding - val) <= 7
                     ? 'bg-[linear-gradient(120deg,#815AFF,#FF46BE)] text-white'
-                    : 'text-muted-foreground hover:text-foreground',
+                    : 'glass text-muted-foreground hover:text-foreground',
                 )}
               >
-                {m}
+                {label}
               </button>
             ))}
           </div>
