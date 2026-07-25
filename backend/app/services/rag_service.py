@@ -56,10 +56,11 @@ def _grounding_instruction(level: int) -> str:
         )
     if lvl <= 25:
         return (
-            "Answer primarily from your broad general knowledge, giving a complete and genuinely "
-            "helpful explanation. Use the provided course sources as supporting context wherever they "
-            "are relevant and cite them with [n] — but do not limit yourself to them, and never refuse "
-            "just because the sources are thin."
+            "Do NOT read, use, quote, or cite the course materials, and ignore any 'Sources' section "
+            "below — retrieval is off at this level. You are answering purely as a general-purpose AI "
+            "from your own trained knowledge. Give a complete, helpful answer when you know it. If you "
+            'genuinely do not know the answer from your trained knowledge, say exactly: "I don\'t have '
+            'this knowledge." Do not fall back to the course materials.'
         )
     return (
         f"Use BOTH the provided course sources and your general knowledge, weighted roughly {src}% "

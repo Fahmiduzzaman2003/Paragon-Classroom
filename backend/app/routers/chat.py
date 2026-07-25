@@ -220,14 +220,19 @@ async def chat_stream(
     if cache_hit:
         citations_payload = cache_hit.get("citations") or []
     else:
+        # At low grounding (Open) the AI answers purely from its own trained
+        # knowledge, so skip retrieval entirely — no sources fetched, no citations.
         # Retrieval runs OUTSIDE the streaming generator so failures surface as HTTP 500.
-        retrieved = await asyncio.to_thread(
-            hybrid_retrieve,
-            course,
-            payload.message,
-            None,
-            payload.scoped_material_id,
-        )
+        if effective_grounding <= 25:
+            retrieved = []
+        else:
+            retrieved = await asyncio.to_thread(
+                hybrid_retrieve,
+                course,
+                payload.message,
+                None,
+                payload.scoped_material_id,
+            )
         citations_payload = [
             {
                 "id": f"cit-{i+1}",
