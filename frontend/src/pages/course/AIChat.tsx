@@ -106,8 +106,12 @@ export function AIChat() {
   }, [persistedMessages, streamingMsg, optimisticUser, cachedIds])
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages.length, streamingMsg?.content])
+    const el = scrollRef.current
+    if (!el) return
+    // Instant follow while tokens stream in (smooth-scrolling every frame stutters);
+    // smooth only when a whole new message appears.
+    el.scrollTo({ top: el.scrollHeight, behavior: chat.streaming ? 'auto' : 'smooth' })
+  }, [messages.length, streamingMsg?.content, chat.streaming])
 
   const { data: materials = [] } = useMaterials(course.id)
   const ready = materials.filter((m) => m.status === 'ready')
@@ -155,6 +159,17 @@ export function AIChat() {
 
     let liveCitations: Citation[] = []
     let liveText = ''
+    // Coalesce token updates: many deltas per frame collapse into ONE React
+    // state update per animation frame, so markdown re-parses ~60x/s at most
+    // instead of once per token. This is the main fix for streaming jank.
+    let rafId: number | null = null
+    const flush = () => {
+      rafId = null
+      setStreamingMsg((m) => (m ? { ...m, content: liveText, citations: liveCitations } : m))
+    }
+    const scheduleFlush = () => {
+      if (rafId == null) rafId = requestAnimationFrame(flush)
+    }
 
     await chat.stream({
       courseId: course.id,
@@ -179,25 +194,16 @@ export function AIChat() {
       },
       onCitations: (citations) => {
         liveCitations = citations
-        setStreamingMsg((m) =>
-          m ? { ...m, citations: liveCitations } : m,
-        )
+        scheduleFlush()
       },
       onDebug: (chunks) => setDebugChunks(chunks),
       onDelta: (delta) => {
         liveText += delta
-        setStreamingMsg((m) =>
-          m
-            ? {
-                ...m,
-                content: liveText,
-                citations: liveCitations,
-              }
-            : m,
-        )
+        scheduleFlush()
       },
       onError: (msg) => toast.error(msg),
       onDone: () => {
+        if (rafId != null) cancelAnimationFrame(rafId)
         // Clear local optimistic state; the invalidated query will show the
         // persisted assistant + user messages from the backend.
         setStreamingMsg(null)

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -15,8 +16,34 @@ interface Props {
   gradient: [string, string, string]
 }
 
-export function MessageBubble({ message, aiName, gradient }: Props) {
+// Full plugin set once the message is settled; a lighter set while streaming.
+// rehype-highlight (syntax highlighting) is the most expensive plugin and code
+// blocks are incomplete mid-stream, so we skip it until the answer finishes.
+const REMARK = [remarkGfm, remarkMath]
+const REHYPE_FULL = [rehypeKatex, rehypeHighlight]
+const REHYPE_STREAMING = [rehypeKatex]
+
+function MessageBubbleInner({ message, aiName, gradient }: Props) {
   const isUser = message.role === 'user'
+
+  // Memoize the rendered body so it only re-parses when the text (or streaming
+  // state) actually changes — not when unrelated parent state updates.
+  const body = useMemo(() => {
+    if (isUser) {
+      return <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+    }
+    return (
+      <div className={message.streaming ? 'stream-caret' : ''}>
+        <ReactMarkdown
+          remarkPlugins={REMARK}
+          rehypePlugins={message.streaming ? REHYPE_STREAMING : REHYPE_FULL}
+        >
+          {message.content}
+        </ReactMarkdown>
+      </div>
+    )
+  }, [isUser, message.content, message.streaming])
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -67,18 +94,7 @@ export function MessageBubble({ message, aiName, gradient }: Props) {
               : 'glass-strong rounded-tl-sm text-sm prose-chat',
           )}
         >
-          {isUser ? (
-            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-          ) : (
-            <div className={message.streaming ? 'stream-caret' : ''}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex, rehypeHighlight]}
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
-          )}
+          {body}
         </div>
 
         {message.citations && message.citations.length > 0 && (
@@ -92,3 +108,7 @@ export function MessageBubble({ message, aiName, gradient }: Props) {
     </motion.div>
   )
 }
+
+// Memoized so that, during streaming, only the one changing bubble re-renders —
+// prior messages keep a stable reference and are skipped.
+export const MessageBubble = memo(MessageBubbleInner)
