@@ -33,12 +33,12 @@ export function Landing() {
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <GlassButton asChild variant="ghost" size="sm">
+          <GlassButton asChild variant="glass" size="sm">
             <Link to="/login">Sign in</Link>
           </GlassButton>
           <GlassButton asChild size="sm">
             <Link to="/register">
-              Get started
+              Sign up
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </GlassButton>
@@ -57,10 +57,13 @@ export function Landing() {
               <Sparkles className="h-3 w-3" />
               RAG-powered classrooms
             </span>
-            <h1 className="font-display text-5xl md:text-6xl font-bold tracking-tight text-balance leading-[1.05] mt-2">
-              A dedicated{' '}
-              <span className="text-gradient">course AI</span>{' '}
-              for every classroom.
+            <h1 className="font-display font-bold tracking-tight mt-2">
+              <span className="block text-7xl md:text-8xl text-gradient leading-[0.95] drop-shadow-[0_10px_50px_rgba(129,90,255,0.35)]">
+                Paragon
+              </span>
+              <span className="mt-4 block text-3xl md:text-4xl font-semibold text-balance leading-[1.1] text-foreground/90">
+                A dedicated <span className="text-gradient">course AI</span> for every classroom.
+              </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed">
               Paragon gives every course its own assistant —{' '}
