@@ -94,8 +94,10 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <CourseOverview /> },
               { path: 'materials', element: <Materials /> },
-              { path: 'chat', element: <AIChat /> },
-              { path: 'chat/:conversationId', element: <AIChat /> },
+              // One route with an optional param so /chat and /chat/:id resolve to
+              // the SAME element instance — navigating between them updates the
+              // param without remounting AIChat (which would reset its state).
+              { path: 'chat/:conversationId?', element: <AIChat /> },
               { path: 'quizzes', element: <Quizzes /> },
               { path: 'quizzes/:quizId', element: <QuizAttempt /> },
               { path: 'quizzes/:quizId/submissions', element: <ExamFolder /> },
