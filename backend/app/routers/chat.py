@@ -190,17 +190,14 @@ async def chat_stream(
     # retrieval and the LLM. Only new conversations are cacheable, so follow-ups
     # (which depend on prior turns) always run normally. Fail-open: any cache
     # error falls straight through to the normal path.
-    # Resolve the grounding level the student asked for, and the course default.
-    # The cache is keyed by question only, so it's only safe to reuse an answer
-    # when the grounding matches the default — a custom slider value always gets
-    # a fresh answer.
+    # The cache is keyed by (course, question, grounding), so every grounding
+    # level has its own answer — a strict answer is never served for an open
+    # request, and each level still benefits from caching.
     effective_grounding = resolve_grounding(payload.grounding, payload.rag_mode, course.rag_mode)
-    default_grounding = resolve_grounding(None, None, course.rag_mode)
     cacheable = (
         settings.semantic_cache_enabled
         and not payload.conversation_id
         and not payload.scoped_material_id
-        and effective_grounding == default_grounding
     )
     cache_hit: dict | None = None
     if cacheable:
@@ -211,6 +208,7 @@ async def chat_stream(
                 payload.message,
                 settings.semantic_cache_threshold,
                 settings.semantic_cache_ttl_days,
+                effective_grounding,
             )
         except Exception as e:  # noqa: BLE001 — cache is best-effort
             log.warning("Semantic cache lookup failed: %s", e)
@@ -324,7 +322,7 @@ async def chat_stream(
                 try:
                     await asyncio.to_thread(
                         vector_store.semantic_cache_store,
-                        course_id, payload.message, full, citations_payload,
+                        course_id, payload.message, full, citations_payload, effective_grounding,
                     )
                 except Exception as e:  # noqa: BLE001 — cache is best-effort
                     log.warning("Semantic cache store failed: %s", e)

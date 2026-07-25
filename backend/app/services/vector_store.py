@@ -325,23 +325,32 @@ class PgVectorBackend:
                         question TEXT NOT NULL,
                         answer TEXT NOT NULL,
                         citations JSONB,
+                        grounding INTEGER NOT NULL DEFAULT 50,
                         embedding vector({self._dim}),
                         created_at TIMESTAMPTZ DEFAULT now()
                     )
                     """
                 ))
-                c.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_cache_course ON qa_cache (course_id)"))
+                # Existing deployments predate the grounding column — add it so a
+                # cached answer is scoped to the grounding level it was made at.
+                c.execute(text(
+                    "ALTER TABLE qa_cache ADD COLUMN IF NOT EXISTS grounding INTEGER NOT NULL DEFAULT 50"
+                ))
+                c.execute(text("CREATE INDEX IF NOT EXISTS idx_qa_cache_course ON qa_cache (course_id, grounding)"))
             self._cache_ensured = True
 
-    def cache_lookup(self, course_id: str, embedding: list[float], ttl_days: int) -> dict | None:
+    def cache_lookup(
+        self, course_id: str, embedding: list[float], ttl_days: int, grounding: int
+    ) -> dict | None:
         from sqlalchemy import text
 
         self._ensure_cache_schema()
         sql = text(
-            f"""
+            """
             SELECT answer, citations, 1 - (embedding <=> CAST(:qv AS vector)) AS score
             FROM qa_cache
             WHERE course_id = :cid
+              AND grounding = :g
               AND created_at > now() - make_interval(days => :ttl)
             ORDER BY embedding <=> CAST(:qv AS vector)
             LIMIT 1
@@ -349,7 +358,11 @@ class PgVectorBackend:
         )
         with self._engine.connect() as c:
             row = c.execute(
-                sql, {"cid": course_id, "qv": self._vec_literal(embedding), "ttl": int(ttl_days)}
+                sql,
+                {
+                    "cid": course_id, "qv": self._vec_literal(embedding),
+                    "ttl": int(ttl_days), "g": int(grounding),
+                },
             ).mappings().first()
         if not row:
             return None
@@ -357,7 +370,7 @@ class PgVectorBackend:
 
     def cache_store(
         self, cache_id: str, course_id: str, question: str, answer: str,
-        citations: list, embedding: list[float],
+        citations: list, embedding: list[float], grounding: int,
     ) -> None:
         import json
 
@@ -368,14 +381,14 @@ class PgVectorBackend:
             c.execute(
                 text(
                     """
-                    INSERT INTO qa_cache (id, course_id, question, answer, citations, embedding)
-                    VALUES (:id, :cid, :q, :a, CAST(:cit AS JSONB), CAST(:emb AS vector))
+                    INSERT INTO qa_cache (id, course_id, question, answer, citations, grounding, embedding)
+                    VALUES (:id, :cid, :q, :a, CAST(:cit AS JSONB), :g, CAST(:emb AS vector))
                     ON CONFLICT (id) DO NOTHING
                     """
                 ),
                 {
                     "id": cache_id, "cid": course_id, "q": question[:4000], "a": answer,
-                    "cit": json.dumps(citations), "emb": self._vec_literal(embedding),
+                    "cit": json.dumps(citations), "g": int(grounding), "emb": self._vec_literal(embedding),
                 },
             )
 
@@ -468,11 +481,13 @@ def collection_size(collection_name: str) -> int:
 # Semantic answer cache (pgvector-only; no-op on chroma/sqlite)
 # ─────────────────────────────────────────────────────────────
 def semantic_cache_lookup(
-    course_id: str, question: str, threshold: float, ttl_days: int
+    course_id: str, question: str, threshold: float, ttl_days: int, grounding: int
 ) -> dict[str, Any] | None:
     """Return {"answer", "citations", "score"} if a past answer for this course
-    is within `threshold` cosine similarity of `question`, else None. Reuses the
-    in-process-cached query embedding, so no extra API call vs. retrieval."""
+    AT THE SAME GROUNDING LEVEL is within `threshold` cosine similarity of
+    `question`, else None. Keying on `grounding` is what stops a strict answer
+    being served for an open request. Reuses the in-process-cached query
+    embedding, so no extra API call vs. retrieval."""
     b = _backend()
     if not isinstance(b, PgVectorBackend) or not question.strip():
         return None
@@ -480,14 +495,14 @@ def semantic_cache_lookup(
     if not emb:
         return None
     with _lock:
-        hit = b.cache_lookup(course_id, emb[0], ttl_days)
+        hit = b.cache_lookup(course_id, emb[0], ttl_days, grounding)
     if hit and hit["score"] >= threshold:
         return hit
     return None
 
 
 def semantic_cache_store(
-    course_id: str, question: str, answer: str, citations: list[dict[str, Any]]
+    course_id: str, question: str, answer: str, citations: list[dict[str, Any]], grounding: int
 ) -> None:
     import uuid
 
@@ -498,7 +513,7 @@ def semantic_cache_store(
     if not emb:
         return
     with _lock:
-        b.cache_store(str(uuid.uuid4()), course_id, question, answer, citations or [], emb[0])
+        b.cache_store(str(uuid.uuid4()), course_id, question, answer, citations or [], emb[0], grounding)
 
 
 def semantic_cache_invalidate(course_id: str) -> int:
