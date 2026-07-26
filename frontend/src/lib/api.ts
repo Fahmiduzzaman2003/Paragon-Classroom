@@ -30,17 +30,34 @@ function setWaking(v: boolean) {
   wakeListeners.forEach((fn) => fn(v))
 }
 
-/** Fire-and-forget prewarm: start the Render dyno waking as soon as the app
- * loads, so it's likely up by the time the user does something. */
+/** Wake the Render dyno and RESOLVE ONLY when it's actually healthy.
+ *
+ * Single-flighted: many failing requests share ONE wake-up instead of each
+ * hammering /healthz (a thundering herd that slows a cold/struggling free-tier
+ * instance). Polls /healthz until it returns 200 (or a deadline), so callers can
+ * retry immediately after and succeed on the first try. */
+let _warming: Promise<void> | null = null
+
 export async function warmUpBackend(): Promise<void> {
-  try {
+  if (_warming) return _warming
+  _warming = (async () => {
     setWaking(true)
-    await axios.get(`${API_URL}/healthz`, { timeout: 65_000 })
-  } catch {
-    /* ignore — this is best-effort */
-  } finally {
-    setWaking(false)
-  }
+    const deadline = Date.now() + 75_000
+    try {
+      while (Date.now() < deadline) {
+        try {
+          await axios.get(`${API_URL}/healthz`, { timeout: 8_000 })
+          return // backend is up
+        } catch {
+          await new Promise((r) => setTimeout(r, 2500))
+        }
+      }
+    } finally {
+      setWaking(false)
+      _warming = null
+    }
+  })()
+  return _warming
 }
 
 function isTransient(err: AxiosError): boolean {
@@ -106,18 +123,13 @@ api.interceptors.response.use(
       }
     }
 
-    // Cold start: a transient timeout/network error gets ONE retry after a short
-    // wait, with the UI showing an honest "waking up the server" state.
+    // Cold start / dropped connection: wait for the shared wake-up to confirm the
+    // backend is healthy, then retry ONCE. Single-flighted warmUpBackend() means
+    // N simultaneous failures share one /healthz poll instead of stampeding it.
     if (original && !original._wokeRetry && isTransient(err)) {
       original._wokeRetry = true
-      setWaking(true)
-      try {
-        await warmUpBackend()
-        await new Promise((r) => setTimeout(r, 1200))
-        return await api.request(original)
-      } finally {
-        setWaking(false)
-      }
+      await warmUpBackend()
+      return await api.request(original)
     }
 
     return Promise.reject(err)
