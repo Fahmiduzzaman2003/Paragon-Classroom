@@ -33,6 +33,18 @@ import { NotFound } from '@/pages/NotFound'
 
 function RequireAuth() {
   const user = useAuthStore((s) => s.user)
+  const hydrated = useAuthStore((s) => s.hydrated)
+  // Wait for the session to rehydrate before deciding. In Firebase mode `user`
+  // is null on a fresh page load until onIdTokenChanged restores the session —
+  // redirecting on `!user` before that bounces an authenticated user to /login
+  // on every reload / deep link.
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="h-8 w-8 rounded-full border-2 border-white/20 border-t-white/80 animate-spin" />
+      </div>
+    )
+  }
   if (!user) return <Navigate to="/login" replace />
   return <Outlet />
 }
