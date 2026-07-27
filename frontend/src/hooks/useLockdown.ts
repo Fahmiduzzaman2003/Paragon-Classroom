@@ -86,6 +86,16 @@ export function useLockdown(
   const [isFullscreen, setIsFullscreen] = useState(false)
   const violationLatchRef = useRef<Record<string, number>>({})
 
+  // When the student opens a native file picker to attach an answer (photo/PDF),
+  // the browser blurs the window — which must NOT count as a tab/screen switch.
+  // A file-input click sets this to `now`; while it's "fresh" we suppress the
+  // blur/visibility-hidden the dialog causes and the focus we get back when it
+  // closes. Bounded lifetime so a browser that never refocuses can't disable
+  // switch-detection for the rest of the exam.
+  const fileDialogRef = useRef(0)
+  const uploadDialogOpen = () =>
+    fileDialogRef.current > 0 && Date.now() - fileDialogRef.current < 120_000
+
   // Throttle each violation type: at most one event per type per 1.2 s, so a
   // student can't spam the log by holding Ctrl+C.
   const fire = (e: LockdownEvent) => {
@@ -124,17 +134,46 @@ export function useLockdown(
   // ─── Tab/window focus ──────────────────────────────────────────────────
   useEffect(() => {
     if (!enabled) return
+    // A click on a file input (or an element opting in via [data-proctor-upload])
+    // means a native picker is about to steal focus. Capture phase so we see it
+    // before anything can stopPropagation, and it also catches the programmatic
+    // `inputRef.click()` that hidden upload buttons dispatch.
+    const onClickCapture = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null
+      if (!el) return
+      const input = el as HTMLInputElement
+      const isFileInput = input.tagName === 'INPUT' && input.type === 'file'
+      if (isFileInput || el.closest('[data-proctor-upload]')) {
+        fileDialogRef.current = Date.now()
+      }
+    }
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
+      // Opening a file dialog keeps the page "visible" (only blurs), so a hidden
+      // state here is a genuine tab switch / minimize even mid-upload — but honor
+      // the grace window defensively for browsers that briefly report hidden.
+      if (document.visibilityState === 'hidden' && !uploadDialogOpen()) {
         fire({ type: 'visibility_hidden' })
       }
     }
-    const onBlur = () => fire({ type: 'tab_blur' })
-    const onFocus = () => fire({ type: 'tab_focus' })
+    const onBlur = () => {
+      if (uploadDialogOpen()) return // blur caused by our own file picker
+      fire({ type: 'tab_blur' })
+    }
+    const onFocus = () => {
+      if (uploadDialogOpen()) {
+        // Focus returned because the file dialog closed — consume the grace
+        // window so it doesn't shadow a later real switch, and don't log it.
+        fileDialogRef.current = 0
+        return
+      }
+      fire({ type: 'tab_focus' })
+    }
+    document.addEventListener('click', onClickCapture, { capture: true })
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('blur', onBlur)
     window.addEventListener('focus', onFocus)
     return () => {
+      document.removeEventListener('click', onClickCapture, { capture: true } as never)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)

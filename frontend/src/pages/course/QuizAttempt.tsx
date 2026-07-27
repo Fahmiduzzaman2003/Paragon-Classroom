@@ -1267,6 +1267,7 @@ function AttachmentDock({
         size="sm"
         onClick={onPick}
         disabled={upload.isPending}
+        data-proctor-upload
       >
         {upload.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {upload.isPending ? 'Uploading…' : 'Upload file'}
