@@ -1,8 +1,18 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, MoreVertical, Sparkles, Trash2, Users } from 'lucide-react'
 import { Progress } from '@/components/ui/Progress'
 import { Badge } from '@/components/ui/Badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/DropdownMenu'
+import { DeleteCourseDialog } from '@/components/course/DeleteCourseDialog'
+import { useAuthStore } from '@/stores/authStore'
+import { cn } from '@/lib/utils'
 import type { Course } from '@/types'
 
 interface Props {
@@ -12,14 +22,49 @@ interface Props {
 
 export function CourseCard({ course, index = 0 }: Props) {
   const [a, b, c] = course.gradient
+  const user = useAuthStore((s) => s.user)
+  const canManage = !!user && (user.id === course.teacherId || user.role === 'admin')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05, ease: 'easeOut' }}
       whileHover={{ y: -4 }}
-      className="group"
+      className="group relative"
     >
+      {/* Sits OUTSIDE the Link so opening the menu never navigates (and so we
+          don't nest a button inside an anchor). */}
+      {canManage && (
+        <div className="absolute top-2.5 right-2.5 z-20">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Manage ${course.name}`}
+                className="h-7 w-7 rounded-full flex items-center justify-center bg-black/30 backdrop-blur-md border border-white/20 text-white/90 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 hover:bg-black/50 transition"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                // Deferred a tick so the menu finishes closing before the dialog
+                // mounts — otherwise Radix's focus-restore steals the autoFocus.
+                onSelect={() => setTimeout(() => setDeleteOpen(true), 0)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete course
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      <DeleteCourseDialog course={course} open={deleteOpen} onOpenChange={setDeleteOpen} />
+
       <Link
         to={`/app/courses/${course.id}`}
         className="relative block rounded-3xl overflow-hidden glass-hover"
@@ -45,7 +90,12 @@ export function CourseCard({ course, index = 0 }: Props) {
           <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px]" />
 
           {/* AI badge — THE key visual for this spec */}
-          <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
+          <div
+            className={cn(
+              'absolute top-3 left-3 right-3 flex items-start justify-between',
+              canManage && 'pr-8',
+            )}
+          >
             <div className="flex items-center gap-2 rounded-full bg-black/30 backdrop-blur-md border border-white/20 px-2.5 py-1">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inset-0 rounded-full bg-emerald-400 animate-pulse" />
