@@ -1,19 +1,32 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from ..dependencies import CurrentUser, Database, assert_enrolled, require_teacher
+from ..models.assignment import Assignment, Submission
+from ..models.conversation import Conversation, Message
 from ..models.course import Course
 from ..models.enrollment import Enrollment
+from ..models.event import Announcement, CalendarEvent
+from ..models.flashcard import Flashcard
+from ..models.forum import ForumReply, ForumThread
+from ..models.job import IngestionJob
 from ..models.material import Material
+from ..models.notification import Notification
+from ..models.quiz import Attempt, AttemptAttachment, Question, Quiz
 from ..models.user import Role, User
 from ..schemas.course import CourseCreate, CourseJoin, CourseOut, CourseUpdate
+from ..services.ingestion import delete_course_chunks
+from ..services.storage import get_storage
 from ..utils.security import generate_course_code
+from ..utils.web_parsers import is_web_url
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -138,6 +151,131 @@ async def update_course(
     await db.commit()
     await db.refresh(course, attribute_names=["teacher"])
     return await _serialize(db, course, current.id)
+
+
+async def _purge_course(db, course: Course) -> None:
+    """Delete a course and everything hanging off it.
+
+    Most child tables reference ``courses.id`` with a plain FK (no ON DELETE
+    CASCADE), so Postgres rejects the parent delete unless we clear them here,
+    deepest-first. Blob URLs are collected before their rows go, then cleaned
+    up best-effort *after* the transaction commits — an orphaned file is a far
+    better outcome than a half-deleted course.
+    """
+    course_id = course.id
+    collection = course.collection_name
+
+    quiz_ids = list((await db.scalars(select(Quiz.id).where(Quiz.course_id == course_id))).all())
+    assignment_ids = list(
+        (await db.scalars(select(Assignment.id).where(Assignment.course_id == course_id))).all()
+    )
+    thread_ids = list(
+        (await db.scalars(select(ForumThread.id).where(ForumThread.course_id == course_id))).all()
+    )
+    convo_ids = list(
+        (await db.scalars(select(Conversation.id).where(Conversation.course_id == course_id))).all()
+    )
+    attempt_ids = (
+        list((await db.scalars(select(Attempt.id).where(Attempt.quiz_id.in_(quiz_ids)))).all())
+        if quiz_ids
+        else []
+    )
+
+    blobs: list[str] = list(
+        (await db.scalars(select(Material.path).where(Material.course_id == course_id))).all()
+    )
+    if quiz_ids:
+        blobs += [
+            p
+            for p in (
+                await db.scalars(
+                    select(Question.image_path).where(Question.quiz_id.in_(quiz_ids))
+                )
+            ).all()
+            if p  # image_path is nullable — most questions have no image
+        ]
+    if attempt_ids:
+        blobs += list(
+            (
+                await db.scalars(
+                    select(AttemptAttachment.path).where(
+                        AttemptAttachment.attempt_id.in_(attempt_ids)
+                    )
+                )
+            ).all()
+        )
+    if assignment_ids:
+        rows = (
+            await db.scalars(
+                select(Submission.files).where(Submission.assignment_id.in_(assignment_ids))
+            )
+        ).all()
+        for files in rows:
+            blobs += [f["path"] for f in (files or []) if isinstance(f, dict) and f.get("path")]
+
+    if attempt_ids:
+        await db.execute(
+            delete(AttemptAttachment).where(AttemptAttachment.attempt_id.in_(attempt_ids))
+        )
+    if quiz_ids:
+        await db.execute(delete(Attempt).where(Attempt.quiz_id.in_(quiz_ids)))
+        await db.execute(delete(Question).where(Question.quiz_id.in_(quiz_ids)))
+    await db.execute(delete(Quiz).where(Quiz.course_id == course_id))
+
+    if assignment_ids:
+        await db.execute(delete(Submission).where(Submission.assignment_id.in_(assignment_ids)))
+    await db.execute(delete(Assignment).where(Assignment.course_id == course_id))
+
+    if thread_ids:
+        await db.execute(delete(ForumReply).where(ForumReply.thread_id.in_(thread_ids)))
+    await db.execute(delete(ForumThread).where(ForumThread.course_id == course_id))
+
+    if convo_ids:
+        await db.execute(delete(Message).where(Message.conversation_id.in_(convo_ids)))
+    await db.execute(delete(Conversation).where(Conversation.course_id == course_id))
+
+    await db.execute(delete(IngestionJob).where(IngestionJob.course_id == course_id))
+    await db.execute(delete(Flashcard).where(Flashcard.course_id == course_id))
+    await db.execute(delete(CalendarEvent).where(CalendarEvent.course_id == course_id))
+    await db.execute(delete(Announcement).where(Announcement.course_id == course_id))
+    await db.execute(delete(Notification).where(Notification.course_id == course_id))
+    await db.execute(delete(Material).where(Material.course_id == course_id))
+    await db.execute(delete(Enrollment).where(Enrollment.course_id == course_id))
+    await db.execute(delete(Course).where(Course.id == course_id))
+    await db.commit()
+
+    try:
+        await delete_course_chunks(collection, course_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Vector cleanup failed for course %s: %s", course_id, e)
+
+    # External links point at somebody else's server — nothing of ours to drop.
+    local_blobs = [p for p in blobs if p and not is_web_url(p)]
+    if local_blobs:
+        try:
+            storage = get_storage()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Storage unavailable; %d blobs left orphaned: %s", len(local_blobs), e)
+            return
+        for path in local_blobs:
+            try:
+                await storage.delete(path)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Blob deletion failed for %s: %s", path, e)
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course(course_id: str, current: CurrentUser, db: Database) -> None:
+    """Permanently delete a course — teacher of record (or admin) only."""
+    course = await db.get(Course, course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if course.teacher_id != current.id and current.role != Role.ADMIN.value:
+        raise HTTPException(
+            status_code=403, detail="Only the course teacher can delete this course"
+        )
+    await _purge_course(db, course)
+    log.info("Course %s deleted by %s", course_id, current.id)
 
 
 @router.post("/join", response_model=CourseOut)

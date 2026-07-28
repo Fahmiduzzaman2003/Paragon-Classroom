@@ -43,6 +43,20 @@ export function useCreateCourse() {
   })
 }
 
+export function useDeleteCourse() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (courseId: string) => {
+      await api.delete(`/courses/${courseId}`)
+      return courseId
+    },
+    onSuccess: (courseId) => {
+      qc.removeQueries({ queryKey: ['course', courseId] })
+      qc.invalidateQueries({ queryKey: ['courses'] })
+    },
+  })
+}
+
 export function useJoinCourse() {
   const qc = useQueryClient()
   return useMutation({

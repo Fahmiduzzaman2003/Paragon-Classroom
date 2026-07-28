@@ -51,6 +51,8 @@ class VectorBackend(Protocol):
 
     def delete_by_material(self, collection: str, material_id: str) -> None: ...
 
+    def delete_collection(self, collection: str) -> None: ...
+
     def all_documents(self, collection: str, limit: int) -> list[dict[str, Any]]: ...
 
     def collection_size(self, collection: str) -> int: ...
@@ -110,6 +112,14 @@ class ChromaBackend:
             self._collection(collection).delete(where={"material_id": material_id})
         except Exception as e:
             log.warning("Chroma delete failed for %s: %s", material_id, e)
+
+    def delete_collection(self, collection) -> None:
+        try:
+            self._client().delete_collection(name=collection)
+        except Exception as e:
+            # Chroma raises if the collection was never created (a course whose
+            # materials were never ingested) — nothing to drop, so that's fine.
+            log.warning("Chroma collection delete failed for %s: %s", collection, e)
 
     def all_documents(self, collection, limit) -> list[dict[str, Any]]:
         try:
@@ -286,6 +296,13 @@ class PgVectorBackend:
                 {"c": collection, "m": material_id},
             )
 
+    def delete_collection(self, collection) -> None:
+        from sqlalchemy import text
+
+        self._ensure_schema()
+        with self._engine.begin() as c:
+            c.execute(text("DELETE FROM rag_chunks WHERE collection = :c"), {"c": collection})
+
     def all_documents(self, collection, limit) -> list[dict[str, Any]]:
         from sqlalchemy import text
 
@@ -452,6 +469,12 @@ def upsert_chunks(
 def delete_by_material(collection_name: str, material_id: str) -> None:
     with _lock:
         _backend().delete_by_material(collection_name, material_id)
+
+
+def delete_collection(collection_name: str) -> None:
+    """Drop every chunk in a collection — used when a whole course is deleted."""
+    with _lock:
+        _backend().delete_collection(collection_name)
 
 
 def query(

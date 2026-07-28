@@ -193,3 +193,16 @@ async def delete_material_chunks(course: Course, material_id: str) -> None:
         await asyncio.to_thread(vector_store.semantic_cache_invalidate, course.id)
     except Exception as e:  # noqa: BLE001
         log.warning("Semantic cache invalidation failed for course %s: %s", course.id, e)
+
+
+async def delete_course_chunks(collection_name: str, course_id: str) -> None:
+    """Drop a course's entire vector collection and its cached answers.
+
+    Takes plain strings rather than a ``Course`` so it can be called after the
+    ORM row has already been deleted.
+    """
+    await asyncio.to_thread(vector_store.delete_collection, collection_name)
+    try:
+        await asyncio.to_thread(vector_store.semantic_cache_invalidate, course_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Semantic cache invalidation failed for course %s: %s", course_id, e)
